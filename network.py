@@ -9,8 +9,6 @@ from copy import copy, deepcopy
 from functools import partial
 from matplotlib.collections import LineCollection
 import csv
-import typing
-from typing import Dict, List, Set, Tuple, Callable, Any
 from enum import Enum
 
 
@@ -34,15 +32,6 @@ from enum import Enum
 # 1. Inertia for parties
 # 2. Poisson distribution for Dunbar numbers
 # 3. Graphs of connected components
-
-Position = Any
-Color = Any
-Update_Func = Callable[[Position, List[Position], float, List[float]], Position]
-Layout_Map = Dict[int, Position]
-Network = Any
-Axis = Any
-Edge = Any
-Figure = Any
 
 class DunbarType(Enum):
     Fixed = 'fixed'
@@ -75,41 +64,42 @@ class Color_Func(Enum):
     Firmness = 'firmness'
     Charisma = 'charisma'
 
-class Arguments(typing.NamedTuple):
-    dunbar:int = 5
-    dunbar_type:DunbarType = DunbarType.Fixed
-    population:int=100
-    snapshot:Set[int]=set()
-    snapshot_name:str=''
-    steps:int=500
-    selectivity:Selectivity = Selectivity.Selective
-    rec_factor:float=0
-    noise:float=0
-    show:bool=True
-    save:bool=False
-    vid_name:str=""
-    layout:Layout = Layout.Opinion
-    num_sources:int = 0
-    update_func:Update = Update.Inverse
-    attract_strength:float = 0.001
-    repel_strength:float = 0
-    repel_extreme_factor:float = 0
-    use_parties:bool = False
-    num_politicians:int = 1
-    num_lobbies:int = 2
-    party_interval:int = 1
-    party_inertia:float = 0.01
-    quality_loss:float = 0.5
-    bubbles:int=4
-    dimensions:int=2
-    firmness_type:Firmness = Firmness.Fixed
-    firmness:float = 0.1
-    charisma_type:Charisma = Charisma.Fixed
-    charisma:float = 1.0
-    color_func:Color_Func = Color_Func.Firmness
-    lobby_charisma_hack:float = None
+class Arguments:
+    def __init__(self):
+        self.dunbar = 5
+        self.dunbar_type = DunbarType.Fixed
+        self.population=100
+        self.snapshot=set()
+        self.snapshot_name=''
+        self.steps=500
+        self.selectivity = Selectivity.Selective
+        self.rec_factor=0
+        self.noise=0
+        self.show=True
+        self.save=False
+        self.vid_name=""
+        self.layout = Layout.Opinion
+        self.num_sources = 0
+        self.update_func = Update.Inverse
+        self.attract_strength = 0.001
+        self.repel_strength = 0
+        self.repel_extreme_factor = 0
+        self.use_parties = False
+        self.num_politicians = 1
+        self.num_lobbies = 2
+        self.party_interval = 1
+        self.party_inertia = 0.01
+        self.quality_loss = 0.5
+        self.bubbles=4
+        self.dimensions=2
+        self.firmness_type = Firmness.Fixed
+        self.firmness = 0.1
+        self.charisma_type = Charisma.Fixed
+        self.charisma = 1.0
+        self.color_func = Color_Func.Firmness
+        self.lobby_charisma_hack = None
 
-def get_firmness(args:Arguments, is_source:bool, is_lobby:bool, is_politician:bool) -> float:
+def get_firmness(args, is_source, is_lobby, is_politician):
     if is_source or is_lobby or is_politician:
         return 1.0
 
@@ -122,7 +112,7 @@ def get_firmness(args:Arguments, is_source:bool, is_lobby:bool, is_politician:bo
     else:
         assert False
 
-def get_charisma(args:Arguments, is_source:bool, is_lobby:bool, is_politician:bool, lobby_charisma_hack:float) -> float:
+def get_charisma(args, is_source, is_lobby, is_politician, lobby_charisma_hack):
     if is_source or is_lobby or is_politician:
         if lobby_charisma_hack is not None:
             assert is_lobby
@@ -138,7 +128,7 @@ def get_charisma(args:Arguments, is_source:bool, is_lobby:bool, is_politician:bo
         assert False
 
 class Opinion:
-    def __init__(self, dimensions:int, charisma:float, firmness:float, bubble:int, is_source:bool, is_politician:bool, is_lobby:bool, lobby_dimension:int, lobby_charisma_hack:float) -> None:
+    def __init__(self, dimensions, charisma, firmness, bubble, is_source, is_politician, is_lobby, lobby_dimension, lobby_charisma_hack):
         if is_lobby:
             if lobby_charisma_hack is not None:
                 assert charisma == lobby_charisma_hack
@@ -148,18 +138,18 @@ class Opinion:
         else:
             assert lobby_charisma_hack is None
             self.pos:Position = np.array([random()*2 - 1 for _ in range(dimensions)])
-        self.charisma:float = charisma
-        self.firmness:float = firmness
-        self.bubble:int = bubble
+        self.charisma = charisma
+        self.firmness = firmness
+        self.bubble = bubble
         assert sum([is_source, is_politician, is_lobby]) <= 1
-        self.is_source:bool = is_source
-        self.is_politician:bool = is_politician
-        self.is_lobby:bool = is_lobby
+        self.is_source = is_source
+        self.is_politician = is_politician
+        self.is_lobby = is_lobby
         assert lobby_dimension < dimensions
         assert (lobby_dimension == -1 and not is_lobby) or (lobby_dimension >= 0 and is_lobby)
-        self.lobby_dimension:int = lobby_dimension
+        self.lobby_dimension = lobby_dimension
 
-    def add_noise(self, noise:float) -> None:
+    def add_noise(self, noise):
         result = self.pos + noise*np.array([random()*2 - 1 for _ in range(len(self.pos))])
         self.pos = np.clip(result, -1, 1)
 
@@ -172,7 +162,7 @@ class Opinion:
         else:
             return self.pos
 
-    def get_lobby_line(self) -> Tuple[Position, Position]:
+    def get_lobby_line(self):
         assert self.is_lobby
         if self.lobby_dimension == 0:
             return (self.pos[0], self.pos[0]), (-2, 2)
@@ -181,10 +171,8 @@ class Opinion:
         else:
             assert False
 
-Opinion_Map = Dict[int, Opinion]
-
-def move_towards_average(args:Arguments) -> Update_Func:
-    def update_func(x:Position, ys:List[Position], firmness:float, charismas:List[float]) -> Position:
+def move_towards_average(args):
+    def update_func(x, ys, firmness, charismas):
         assert firmness >= 0 and firmness <= 1.0
         assert len(charismas) == len(ys)
         assert all(c >= 0 and c <= 1.0 for c in charismas)
@@ -195,11 +183,11 @@ def move_towards_average(args:Arguments) -> Update_Func:
     return update_func
 
 # y_t = sqrt(y_0^2 - 2*k*t*m1*m2 + z*y_0^2)
-def inverse_force(args:Arguments) -> Update_Func:
+def inverse_force(args):
     k=args.attract_strength
     z=args.repel_strength
     z_factor=args.repel_extreme_factor
-    def update_func(x:Position, ys:List[Position], firmness:float, charismas:List[float]) -> Position:
+    def update_func(x, ys, firmness, charismas):
         assert firmness >= 0 and firmness <= 1.0
         assert len(charismas) == len(ys)
         assert all(c >= 0 and c <= 1.0 for c in charismas)
@@ -221,15 +209,15 @@ def inverse_force(args:Arguments) -> Update_Func:
     return update_func
 
 class OpinionClass:
-    def __init__(self, args:Arguments) -> None:
-        self.update_func:Update_Func = update_funcs[args.update_func](args)
-        self.args:Arguments = args
-        self.get_color:Callable[[List[Opinion]], Color] = color_funcs[args.color_func]
-        self.nodesorter:Callable[[List[int], Dict[int, Opinion]], float] = sorter_funcs[args.color_func]
+    def __init__(self, args):
+        self.update_func = update_funcs[args.update_func](args)
+        self.args = args
+        self.get_color = color_funcs[args.color_func]
+        self.nodesorter = sorter_funcs[args.color_func]
         self.bubble_distances = np.ones((args.bubbles,args.bubbles))-np.eye(args.bubbles)
         assert not args.use_parties or args.num_politicians == 2
 
-    def opinion_distance(self,x:Opinion,y:Opinion) -> float:
+    def opinion_distance(self,x,y):
         if x.is_lobby and y.is_lobby:
             assert False
         elif x.is_lobby:
@@ -239,7 +227,7 @@ class OpinionClass:
         else:
             return np.linalg.norm(x.pos - y.pos) / self.quality(x,y)
 
-    def new_opinion(self, index:int) -> Opinion:
+    def new_opinion(self, index):
         bubble = index % self.args.bubbles
         assert self.args.num_politicians + self.args.num_sources + self.args.num_lobbies <= self.args.population // self.args.bubbles
         is_politician = index < self.args.bubbles * self.args.num_politicians
@@ -263,25 +251,25 @@ class OpinionClass:
 
         return Opinion(self.args.dimensions, charisma, firmness, bubble, is_source, is_politician, is_lobby, lobby_dimension, lobby_charisma_hack)
 
-    def get_midline(self, x:Opinion, y:Opinion) -> Tuple[Position, Position]:
+    def get_midline(self, x, y):
         return get_midline(x.pos, y.pos)
 
-    def firmness(self, x:Opinion) -> float:
+    def firmness(self, x):
         return x.firmness
 
-    def charisma(self, x:Opinion, y:Opinion) -> float:
+    def charisma(self, x, y):
         return y.charisma * self.quality(x, y)
 
-    def update_opinion(self,x:Opinion,ys:List[Opinion]) -> None:
+    def update_opinion(self,x,ys):
         x.pos = self.update_func(x.pos, [y.get_lobby_pos(x) for y in ys], self.firmness(x), [self.charisma(x,y) for y in ys])
 
-    def quality(self, x:Opinion, y:Opinion) -> float:
+    def quality(self, x, y):
         return 1 - self.bubble_distances[x.bubble, y.bubble] * self.args.quality_loss
 
-def get_single_color(x:Position) -> Color:
+def get_single_color(x):
     return np.array([(x[0] + 1) / 2, 1.0 - 0.25*(x[0]+1 + x[1]+1), (x[1]+1)/2])
 
-def opinion_color(xs:List[Opinion]) -> Color:
+def opinion_color(xs):
     for x in xs:
         if x.is_source or x.is_lobby:
             return np.array([0, 1.0, 0])
@@ -292,13 +280,13 @@ def opinion_color(xs:List[Opinion]) -> Color:
     assert all(all(get_single_color(x.pos) == color) for x in xs)
     return color
 
-def opinion_sorter(xs:List[int], os:Dict[int, Opinion]) -> float:
+def opinion_sorter(xs, os):
     for x in xs:
         if os[x].is_politician or os[x].is_source:
             return 2.0
     return 1.0
 
-def firmness_color(xs:List[Opinion]) -> Color:
+def firmness_color(xs):
     for x in xs:
         if x.is_source or x.is_lobby:
             return np.array([0, 1.0, 0])
@@ -307,13 +295,13 @@ def firmness_color(xs:List[Opinion]) -> Color:
 
     return np.array([max(x.firmness for x in xs), 0, 0])
 
-def firmness_sorter(xs:List[int], os:Dict[int, Opinion]) -> float:
+def firmness_sorter(xs, os):
     for x in xs:
         if os[x].is_politician or os[x].is_source:
             return 2.0
     return max(os[x].firmness for x in xs)
 
-def charisma_color(xs:List[Opinion]) -> Color:
+def charisma_color(xs):
     for x in xs:
         if x.is_source or x.is_lobby:
             return np.array([0, 1.0, 0])
@@ -322,13 +310,13 @@ def charisma_color(xs:List[Opinion]) -> Color:
 
     return np.array([max(x.charisma for x in xs), 0, 0])
 
-def charisma_sorter(xs:List[int], os:Dict[int, Opinion]) -> float:
+def charisma_sorter(xs, os):
     for x in xs:
         if os[x].is_politician or os[x].is_source:
             return 2.0
     return max(os[x].charisma for x in xs)
 
-def get_midline(a:Position, b:Position) -> Tuple[Position, Position]:
+def get_midline(a, b):
     assert any(a != b)
     midpoint = (a + b)/2
     vx, vy = b - midpoint
@@ -340,83 +328,68 @@ def get_midline(a:Position, b:Position) -> Tuple[Position, Position]:
         f = (lambda x: midpoint[1] + (x - midpoint[0]) * slope)
         return (-2, 2), (f(-2), f(2))
 
-"""
-class ProportionalOpinion(OpinionClass):
-    def strength(self, x):
-        strength = np.linalg.norm(x - np.array([0,0])) / np.linalg.norm(np.array([1,1]))
-        assert strength >= 0.0
-        assert strength <= 1.0
-        return strength
-
-    def update_opinion(self,x,ys):
-        return (x[0], self.update_func(x[1], [y[1] for y in ys], 1-self.strength(x[1]), [1.0 for _ in ys]))
-
-    def get_single_color(self, x):
-        return np.array([self.strength(x), 0, 0])
-"""
-
 class LayoutClass:
-    def __init__(self) -> None:
+    def __init__(self):
         assert False
-        self.xlim:List[float] = []
-        self.ylim:List[float] = []
+        self.xlim = []
+        self.ylim = []
 
-    def positions(self, layoutpos:Layout_Map, G:Network, opinions:Opinion_Map, opinion_class:OpinionClass) -> Layout_Map:
+    def positions(self, layoutpos, G, opinions, opinion_class):
         assert False
         return {}
 
 class SpringLayout(LayoutClass):
-    def __init__(self) -> None:
-        self.xlim:List[float] = [-0.25,1.25]
-        self.ylim:List[float] = [-0.25,1.25]
+    def __init__(self):
+        self.xlim = [-0.25,1.25]
+        self.ylim = [-0.25,1.25]
 
-    def positions(self, layoutpos:Layout_Map, G:Network, opinions:Opinion_Map, opinion_class:OpinionClass) -> Layout_Map:
+    def positions(self, layoutpos, G, opinions, opinion_class):
         return nx.spring_layout(G, pos=layoutpos, iterations=10, k=0.5/np.sqrt(len(layoutpos)))
 
 class OpinionLayout(LayoutClass):
-    def __init__(self) -> None:
-        self.xlim:List[float] = [-1.1,1.1]
-        self.ylim:List[float] = [-1.1,1.1]
+    def __init__(self):
+        self.xlim = [-1.1,1.1]
+        self.ylim = [-1.1,1.1]
 
-    def positions(self, layoutpos:Layout_Map, G:Network, opinions:Opinion_Map, opinion_class:OpinionClass) -> Layout_Map:
+    def positions(self, layoutpos, G, opinions, opinion_class):
         return {x : o.pos for x,o in opinions.items()}
 
 class AgentClass:
-    def __init__(self, args:Arguments) -> None:
+    def __init__(self, args):
         assert args.num_sources <= args.population
-        self.args:Arguments = args
-        self.OpinionClass:OpinionClass = OpinionClass(args)
-        self.opinions:Opinion_Map = {x : self.OpinionClass.new_opinion(x) for x in range(args.population)}
-        self.layoutpos:Layout_Map = None
-        self.LayoutClass:LayoutClass = graph_layout[args.layout]
+        self.args = args
+        self.OpinionClass = OpinionClass(args)
+        self.opinions = {x : self.OpinionClass.new_opinion(x) for x in range(args.population)}
+        self.layoutpos = None
+        self.LayoutClass = graph_layout[args.layout]
         assert args.noise >= 0 and args.noise <= 1
         assert args.num_sources == 0 or not args.use_parties
-        self.current_party_interval:int = 1
+        self.current_party_interval = 1
 
-    def positions(self, G:Network) -> Layout_Map:
+    def positions(self, G):
         self.layoutpos = self.LayoutClass.positions(self.layoutpos, G, self.opinions, self.OpinionClass)
         return self.layoutpos
 
-    def get_xlim(self) -> List[float]:
+    def get_xlim(self):
         return self.LayoutClass.xlim
 
-    def get_ylim(self) -> List[float]:
+    def get_ylim(self):
         return self.LayoutClass.ylim
 
-    def opinion_distance(self, x:int, y:int) -> float:
+    def opinion_distance(self, x, y):
         return self.OpinionClass.opinion_distance(self.opinions[x], self.opinions[y])
 
-    def update_opinion(self, x:int, ys:List[int]) -> None:
+    def update_opinion(self, x, y):
         self.OpinionClass.update_opinion(self.opinions[x], [self.opinions[y] for y in ys])
         self.opinions[x].add_noise(self.args.noise)
 
-    def get_politicians(self, axis:int) -> List[Opinion]:
+    def get_politicians(self, axis):
         return [o for o in self.opinions.values() if o.is_politician and o.bubble == axis]
 
-    def get_voters(self, axis:int) -> List[Opinion]:
+    def get_voters(self, axis):
         return [o for o in self.opinions.values() if o.bubble == axis and not o.is_politician and not o.is_source]
 
-    def draw_parties(self, axis:int, ax:Axis) -> None:
+    def draw_parties(self, axis, ax):
         if not self.args.use_parties:
             return
         assert self.args.dimensions == 2
@@ -424,26 +397,26 @@ class AgentClass:
         assert isinstance(self.LayoutClass, OpinionLayout)
         a,b = self.get_politicians(axis)
         linex, liney = self.OpinionClass.get_midline(a, b)
-        voters:List[Opinion] = self.get_voters(axis)
+        voters = self.get_voters(axis)
         ax.plot(linex, liney, color='g')
-        avotes:int = sum(1 for x in voters if np.linalg.norm(x.pos - a.pos) < np.linalg.norm(x.pos - b.pos))
-        bvotes:int = sum(1 for x in voters if np.linalg.norm(x.pos - a.pos) > np.linalg.norm(x.pos - b.pos))
+        avotes = sum(1 for x in voters if np.linalg.norm(x.pos - a.pos) < np.linalg.norm(x.pos - b.pos))
+        bvotes = sum(1 for x in voters if np.linalg.norm(x.pos - a.pos) > np.linalg.norm(x.pos - b.pos))
         ax.text(a.pos[0], a.pos[1], str(avotes), color='r', horizontalalignment='center', verticalalignment='center')
         ax.text(b.pos[0], b.pos[1], str(bvotes), color='b', horizontalalignment='center', verticalalignment='center')
         ax.text(-0.1, 1, str(avotes), color='r', horizontalalignment='right', verticalalignment='bottom')
         ax.text(0.1, 1, str(bvotes), color='b', horizontalalignment='left', verticalalignment='bottom')
 
-    def draw_lobbies(self, G:Network, axis:int, ax:Axis) -> None:
+    def draw_lobbies(self, G, axis, ax):
         for o in self.opinions.values():
             if o.is_lobby and o.bubble == axis:
                 linex, liney = o.get_lobby_line()
                 ax.plot(linex, liney, color=self.OpinionClass.get_color([o]), alpha=0.5, linewidth=1)
 
-        edge_pos:List[Position] = []
-        edge_colors:List[Color] = []
+        edge_pos = []
+        edge_colors = []
         for e in G.edges():
-            o1:Opinion = self.opinions[e[0]]
-            o2:Opinion = self.opinions[e[1]]
+            o1 = self.opinions[e[0]]
+            o2 = self.opinions[e[1]]
             if o1.bubble != axis and o2.bubble != axis:
                 continue
             elif o1.is_lobby:
@@ -460,7 +433,7 @@ class AgentClass:
         edge_collection.set_zorder(1)
         ax.add_collection(edge_collection)
 
-    def update_parties(self) -> None:
+    def update_parties(self):
         if not self.args.use_parties:
             return
         if self.current_party_interval < self.args.party_interval:
@@ -473,16 +446,16 @@ class AgentClass:
 
         for axis in range(self.args.bubbles):
             a,b = self.get_politicians(axis)
-            voters:List[Opinion] = self.get_voters(axis)
-            a_allies:List[Position] = [x.pos for x in voters if np.linalg.norm(x.pos - a.pos) < np.linalg.norm(x.pos - b.pos)]
-            b_allies:List[Position] = [x.pos for x in voters if np.linalg.norm(x.pos - a.pos) > np.linalg.norm(x.pos - b.pos)]
+            voters = self.get_voters(axis)
+            a_allies = [x.pos for x in voters if np.linalg.norm(x.pos - a.pos) < np.linalg.norm(x.pos - b.pos)]
+            b_allies = [x.pos for x in voters if np.linalg.norm(x.pos - a.pos) > np.linalg.norm(x.pos - b.pos)]
 
-            new_a:Position = sum(a_allies) / len(a_allies) if len(a_allies) > 0 else a.pos
-            projections:List[float] = [np.dot(p.pos - b.pos, new_a - b.pos) / np.linalg.norm(new_a - b.pos)**2 for p in voters]
+            new_a = sum(a_allies) / len(a_allies) if len(a_allies) > 0 else a.pos
+            projections = [np.dot(p.pos - b.pos, new_a - b.pos) / np.linalg.norm(new_a - b.pos)**2 for p in voters]
             new_a = np.median(projections) * 2 * (new_a - b.pos) + b.pos if np.median(projections) <= 0.5 else new_a
             new_a = np.clip(a.pos + np.clip(new_a - a.pos, -self.args.party_inertia, self.args.party_inertia), -1, 1)
 
-            new_b:Position = sum(b_allies) / len(b_allies) if len(b_allies) > 0 else b.pos
+            new_b = sum(b_allies) / len(b_allies) if len(b_allies) > 0 else b.pos
             projections = [np.dot(p.pos - a.pos, new_b - a.pos) / np.linalg.norm(new_b - a.pos)**2 for p in voters]
             new_b = np.median(projections) * 2 * (new_b - a.pos) + a.pos if np.median(projections) <= 0.5 else new_b
             new_b = np.clip(b.pos + np.clip(new_b - b.pos, -self.args.party_inertia, self.args.party_inertia), -1, 1)
@@ -491,60 +464,60 @@ class AgentClass:
             b.pos = new_b
 
 
-    def get_duplicate_lists(self, dd:Layout_Map) -> List[List[int]]:
-        rev:Dict[Position, List[int]] = {}
+    def get_duplicate_lists(self, dd):
+        rev = {}
         for k, v in dd.items():
             rev.setdefault(tuple(v), []).append(k)
         return list(rev.values())
 
-    def get_size(self, xs:List[int]) -> float:
+    def get_size(self, xs):
         return 50 * (np.log(len(xs)) + 1)
 
-    def get_node_draw_data(self, G:Network, axis:int) -> Tuple[List[int], List[Edge], Layout_Map, List[Color], List[Color], List[float]]:
-        positions:Layout_Map = self.positions(G)
-        positions_filtered:Layout_Map = {x: p for x,p in positions.items() if self.opinions[x].bubble == axis and not self.opinions[x].is_lobby}
-        unique_positions:List[List[int]] = self.get_duplicate_lists(positions_filtered)
-        colors:Dict[int, Color] = {xs[0] : self.OpinionClass.get_color([self.opinions[x] for x in xs]) for xs in unique_positions}
-        sizes:Dict[int, float] = {xs[0] : self.get_size(xs) for xs in unique_positions}
+    def get_node_draw_data(self, G, axis):
+        positions = self.positions(G)
+        positions_filtered = {x: p for x,p in positions.items() if self.opinions[x].bubble == axis and not self.opinions[x].is_lobby}
+        unique_positions = self.get_duplicate_lists(positions_filtered)
+        colors = {xs[0] : self.OpinionClass.get_color([self.opinions[x] for x in xs]) for xs in unique_positions}
+        sizes = {xs[0] : self.get_size(xs) for xs in unique_positions}
         unique_positions.sort(key=lambda xs: self.OpinionClass.nodesorter(xs, {x : self.opinions[x] for x in xs}))
-        nodes:List[int] = [xs[0] for xs in unique_positions if self.opinions[xs[0]].bubble == axis]
-        edges:List[Edge] = [e for e in G.edges() if (self.opinions[e[0]].bubble == axis or self.opinions[e[1]].bubble == axis) and not (self.opinions[e[0]].is_lobby or self.opinions[e[1]].is_lobby)]
-        edge_colors:List[Color] = [within_region if (self.opinions[e[0]].bubble == self.opinions[e[1]].bubble) else between_region for e in edges]
+        nodes = [xs[0] for xs in unique_positions if self.opinions[xs[0]].bubble == axis]
+        edges = [e for e in G.edges() if (self.opinions[e[0]].bubble == axis or self.opinions[e[1]].bubble == axis) and not (self.opinions[e[0]].is_lobby or self.opinions[e[1]].is_lobby)]
+        edge_colors = [within_region if (self.opinions[e[0]].bubble == self.opinions[e[1]].bubble) else between_region for e in edges]
         # nodelist, edgelist, pos, colors, edge_colors, sizes
         return nodes, edges, positions, [colors[x] for x in nodes], edge_colors, [sizes[x] for x in nodes]
 
-within_region:Color = (0.0, 0.0, 0.0, 1.0)
-between_region:Color = (1.0, 0.0, 0.0, 0.3)
+within_region = (0.0, 0.0, 0.0, 1.0)
+between_region = (1.0, 0.0, 0.0, 0.3)
 
 class DunbarClass:
-    def __init__(self, args:Arguments) -> None:
-        sample:Callable[[int], int] = dunbar_funcs[args.dunbar_type]
-        self.dunbar:Dict[int, int] = {x: sample(args.dunbar) for x in range(args.population)}
+    def __init__(self, args):
+        sample = dunbar_funcs[args.dunbar_type]
+        self.dunbar = {x: sample(args.dunbar) for x in range(args.population)}
 
-    def get(self, x:int) -> int:
+    def get(self, x):
         return self.dunbar[x]
 
 class UpdateClass:
-    def __init__(self, Dunbar:DunbarClass, Agents:AgentClass, G:Network, args:Arguments) -> None:
-        self.Dunbar:DunbarClass = Dunbar
-        self.Agents:AgentClass = Agents
-        self.G:Network = G
-        self.args:Arguments = args
+    def __init__(self, Dunbar, Agents, G, args):
+        self.Dunbar = Dunbar
+        self.Agents = Agents
+        self.G = G
+        self.args = args
         self.assert_all()
 
-    def assert_all(self) -> None:
+    def assert_all(self):
         pass
 
-    def above_dunbar(self, x:int) -> None:
+    def above_dunbar(self, x):
         pass
 
-    def below_dunbar(self, x:int) -> None:
+    def below_dunbar(self, x):
         pass
 
-    def at_dunbar(self, x:int) -> None:
+    def at_dunbar(self, x):
         pass
 
-    def update(self, axes:List[Axis], draw:bool) -> List[Axis]:
+    def update(self, axes, draw):
         self.Agents.update_parties()
         for x in self.G:
             if self.Agents.opinions[x].is_source or self.Agents.opinions[x].is_lobby:
@@ -562,7 +535,7 @@ class UpdateClass:
                 self.Agents.update_opinion(x,self.G[x])
         return self.draw_step(axes, draw)
 
-    def draw_step(self, axes:List[Axis], draw:bool) -> List[Axis]:
+    def draw_step(self, axes, draw):
         if draw:
             for i, ax in enumerate(axes):
                 ax.clear()
@@ -576,7 +549,7 @@ class UpdateClass:
                 ax.set_yticks([])
         return axes
 
-def update(num:int, Updater:UpdateClass, axes:List[Axis], fig:Figure, args:Arguments, draw:bool) -> List[Axis]:
+def update(num, Updater, axes, fig, args, draw):
     axes = Updater.update(axes, draw)
     if draw:
         fig.suptitle('Step: {}'.format(num))
@@ -591,13 +564,13 @@ class UpdateNone(UpdateClass):
         Over the dunbar number, agents break connections at random
         At the dunbar number, agents do nothing
     """
-    def assert_all(self) -> None:
+    def assert_all(self):
         assert self.args.rec_factor == 0
 
-    def above_dunbar(self, x:int) -> None:
+    def above_dunbar(self, x):
         self.G.remove_edge(x,choice(self.G.neighbors(x)))
 
-    def below_dunbar(self:UpdateClass, x:int) -> None:
+    def below_dunbar(self, x):
         y = choice(self.G.nodes())
         if y != x:
             self.G.add_edge(x,y)
@@ -607,18 +580,18 @@ class UpdateHigh(UpdateClass):
         Over the dunbar number, agents break connections with the least shared opinion
         At the dunbar number, agents randomly probe for other neighbours with closer opinions
     """
-    def assert_all(self) -> None:
+    def assert_all(self):
         assert self.args.rec_factor == 0
 
-    def above_dunbar(self, x:int) -> None:
+    def above_dunbar(self, x):
         self.G.remove_edge(x,max(self.G[x], key=lambda y: self.Agents.opinion_distance(x,y)))
 
-    def below_dunbar(self:UpdateClass, x:int) -> None:
+    def below_dunbar(self, x):
         candidates = [y for y in self.G if y != x and y not in self.G[x]]
         if candidates:
             winner = self.G.add_edge(x,min(candidates, key=lambda y: self.Agents.opinion_distance(x,y)))
 
-    def at_dunbar(self, x:int) -> None:
+    def at_dunbar(self, x):
         if self.G[x]:
             y = choice(list(self.G.nodes))
             z = choice(list(self.G[x].keys()))
@@ -631,12 +604,12 @@ class UpdateRec(UpdateClass):
         Over the dunbar number, agents break connections with the least shared opinion
         At the dunbar number, agents randomly probe for other neighbours with closer opinions
     """
-    def assert_all(self) -> None:
+    def assert_all(self):
         assert self.args.rec_factor >= 0 and self.args.rec_factor <= 1
 
     above_dunbar = UpdateHigh.above_dunbar
 
-    def below_dunbar(self, x:int) -> None:
+    def below_dunbar(self, x):
         if random() < self.args.rec_factor:
             UpdateNone.below_dunbar(self,x)
         else:
@@ -645,22 +618,22 @@ class UpdateRec(UpdateClass):
     at_dunbar = UpdateHigh.at_dunbar
 
 
-selectivity_funcs:Dict[Selectivity, typing.Type[UpdateClass]] = {Selectivity.Nothing: UpdateNone, Selectivity.Recommend: UpdateRec, Selectivity.Selective: UpdateHigh}
-graph_layout:Dict[Layout, LayoutClass] = {Layout.Spring: SpringLayout(), Layout.Opinion: OpinionLayout()}
-update_funcs:Dict[Update, Callable[[Arguments], Update_Func]] = {Update.Average: move_towards_average, Update.Inverse: inverse_force}
-dunbar_funcs:Dict[DunbarType, Callable[[int], int]] = {DunbarType.Fixed: (lambda d: d), DunbarType.Poisson: (lambda d: np.random.poisson(d))}
-color_funcs:Dict[Color_Func, Callable[[List[Opinion]],Color]] = {Color_Func.Opinion: opinion_color, Color_Func.Firmness: firmness_color, Color_Func.Charisma: charisma_color}
-sorter_funcs:Dict[Color_Func, Callable[[List[int], Dict[int, Opinion]], float]] = {Color_Func.Opinion: opinion_sorter, Color_Func.Firmness: firmness_sorter, Color_Func.Charisma: charisma_sorter}
+selectivity_funcs = {Selectivity.Nothing: UpdateNone, Selectivity.Recommend: UpdateRec, Selectivity.Selective: UpdateHigh}
+graph_layout = {Layout.Spring: SpringLayout(), Layout.Opinion: OpinionLayout()}
+update_funcs = {Update.Average: move_towards_average, Update.Inverse: inverse_force}
+dunbar_funcs = {DunbarType.Fixed: (lambda d: d), DunbarType.Poisson: (lambda d: np.random.poisson(d))}
+color_funcs = {Color_Func.Opinion: opinion_color, Color_Func.Firmness: firmness_color, Color_Func.Charisma: charisma_color}
+sorter_funcs = {Color_Func.Opinion: opinion_sorter, Color_Func.Firmness: firmness_sorter, Color_Func.Charisma: charisma_sorter}
 
 
-def animate(args:Arguments = Arguments()) -> None:
-    G:Network = nx.empty_graph(args.population)
-    Agents:AgentClass = AgentClass(args)
-    Dunbar:DunbarClass = DunbarClass(args)
-    Updater:UpdateClass = selectivity_funcs[args.selectivity](Dunbar, Agents, G, args)
-    gridsize:int = int(np.ceil(np.sqrt(args.bubbles)))
+def animate(args = Arguments()):
+    G = nx.empty_graph(args.population)
+    Agents = AgentClass(args)
+    Dunbar = DunbarClass(args)
+    Updater = selectivity_funcs[args.selectivity](Dunbar, Agents, G, args)
+    gridsize = int(np.ceil(np.sqrt(args.bubbles)))
     fig, axes_array = plt.subplots(gridsize, gridsize, squeeze=False)
-    axes:List[Axis] = axes_array.flatten()
+    axes = axes_array.flatten()
     for ax in axes:
         ax.set_aspect('equal')
     graph_ani = animation.FuncAnimation(fig, update, args.steps, fargs=(Updater, axes, fig, args, True), interval=100, blit=False, repeat=False)
@@ -671,11 +644,11 @@ def animate(args:Arguments = Arguments()) -> None:
     plt.close()
 
 
-def run_simulation(args:Arguments, components:List[List[int]]=None, histogram_x:List[List[int]]=None) -> None:
-    G:Network = nx.empty_graph(args.population)
-    Agents:AgentClass = AgentClass(args)
-    Dunbar:DunbarClass = DunbarClass(args)
-    Updater:UpdateClass = selectivity_funcs[args.selectivity](Dunbar, Agents, G, args)
+def run_simulation(args, components=None, histogram_x=None):
+    G = nx.empty_graph(args.population)
+    Agents = AgentClass(args)
+    Dunbar = DunbarClass(args)
+    Updater = selectivity_funcs[args.selectivity](Dunbar, Agents, G, args)
     for n in range(args.steps):
         update(n, Updater, [], None, args, False)
         if components is not None:
