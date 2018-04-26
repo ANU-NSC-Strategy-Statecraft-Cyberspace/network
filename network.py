@@ -11,10 +11,6 @@ from matplotlib.collections import LineCollection
 import csv
 from enum import Enum
 
-class DunbarType(Enum):
-    Fixed = 'fixed'
-    Poisson = 'poisson'
-
 class Selectivity(Enum):
     Nothing = 'none'
     Recommend = 'recommend'
@@ -45,7 +41,6 @@ class Color_Func(Enum):
 class Arguments:
     def __init__(self):
         self.dunbar = 5
-        self.dunbar_type = DunbarType.Fixed
         self.population=100
         self.snapshot=set()
         self.snapshot_name=''
@@ -467,17 +462,8 @@ class AgentClass:
 within_region = (0.0, 0.0, 0.0, 1.0)
 between_region = (1.0, 0.0, 0.0, 0.3)
 
-class DunbarClass:
-    def __init__(self, args):
-        sample = dunbar_funcs[args.dunbar_type]
-        self.dunbar = {x: sample(args.dunbar) for x in range(args.population)}
-
-    def get(self, x):
-        return self.dunbar[x]
-
 class UpdateClass:
-    def __init__(self, Dunbar, Agents, G, args):
-        self.Dunbar = Dunbar
+    def __init__(self, Agents, G, args):
         self.Agents = Agents
         self.G = G
         self.args = args
@@ -503,9 +489,9 @@ class UpdateClass:
             elif self.Agents.opinions[x].is_politician and self.args.use_parties:
                 pass
             else:
-                if len(self.G[x]) > self.Dunbar.get(x):
+                if len(self.G[x]) > args.dunbar:
                     self.above_dunbar(x)
-                elif len(self.G[x]) < self.Dunbar.get(x):
+                elif len(self.G[x]) < args.dunbar:
                     self.below_dunbar(x)
                 else:
                     self.at_dunbar(x)
@@ -599,7 +585,6 @@ class UpdateRec(UpdateClass):
 selectivity_funcs = {Selectivity.Nothing: UpdateNone, Selectivity.Recommend: UpdateRec, Selectivity.Selective: UpdateHigh}
 graph_layout = {Layout.Spring: SpringLayout(), Layout.Opinion: OpinionLayout()}
 update_funcs = {Update.Average: move_towards_average, Update.Inverse: inverse_force}
-dunbar_funcs = {DunbarType.Fixed: (lambda d: d), DunbarType.Poisson: (lambda d: np.random.poisson(d))}
 color_funcs = {Color_Func.Opinion: opinion_color, Color_Func.Firmness: firmness_color, Color_Func.Charisma: charisma_color}
 sorter_funcs = {Color_Func.Opinion: opinion_sorter, Color_Func.Firmness: firmness_sorter, Color_Func.Charisma: charisma_sorter}
 
@@ -607,8 +592,7 @@ sorter_funcs = {Color_Func.Opinion: opinion_sorter, Color_Func.Firmness: firmnes
 def animate(args = Arguments()):
     G = nx.empty_graph(args.population)
     Agents = AgentClass(args)
-    Dunbar = DunbarClass(args)
-    Updater = selectivity_funcs[args.selectivity](Dunbar, Agents, G, args)
+    Updater = selectivity_funcs[args.selectivity](Agents, G, args)
     gridsize = int(np.ceil(np.sqrt(args.bubbles)))
     fig, axes_array = plt.subplots(gridsize, gridsize, squeeze=False)
     axes = axes_array.flatten()
@@ -625,8 +609,7 @@ def animate(args = Arguments()):
 def run_simulation(args, components=None, histogram_x=None):
     G = nx.empty_graph(args.population)
     Agents = AgentClass(args)
-    Dunbar = DunbarClass(args)
-    Updater = selectivity_funcs[args.selectivity](Dunbar, Agents, G, args)
+    Updater = selectivity_funcs[args.selectivity](Agents, G, args)
     for n in range(args.steps):
         update(n, Updater, [], None, args, False)
         if components is not None:
