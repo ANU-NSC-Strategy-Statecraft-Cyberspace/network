@@ -11,28 +11,6 @@ from matplotlib.collections import LineCollection
 import csv
 from enum import Enum
 
-
-
-# Ideas from discussion:
-#
-#  - A repulsive force that is *equal* in x and y directions even when the separation differs
-#  - randomise order of moves, make the opinion boundary circular, make noise circular
-#  - Discrete opinions with properties, Meme objects; Other idea-attractiveness functions e.g. priviledged ideas
-#  - reasons to vote or disengage, willingness to make compromises
-#  - reject Y because associated with X
-#  - look at dunbar's parameter - dynamics at village scale (population = dunbar), city scale (population > dunbar), cyber scale (population >> dunbar) and think about interactions with spatial limits
-#  - Remove dunbar limit for sources
-#  - ageing process to decrease convinceability and/or conservativeness
-#  - mechanic of capturing connections by being nearby on one dimensions, then pulling them on another one
-#  - sources with looser views on one dimensions that allows them to pull people in easier
-#  - ratio of strength between desire to connect and desire to confirm opinions
-
-
-# Accomplishments:
-# 1. Inertia for parties
-# 2. Poisson distribution for Dunbar numbers
-# 3. Graphs of connected components
-
 class DunbarType(Enum):
     Fixed = 'fixed'
     Poisson = 'poisson'
