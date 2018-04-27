@@ -25,7 +25,6 @@ class Charisma(Enum):
     Random = 'random'
 
 class Color_Func(Enum):
-    Opinion = 'opinion'
     Firmness = 'firmness'
     Charisma = 'charisma'
 
@@ -226,26 +225,6 @@ class OpinionClass:
 
     def quality(self, x, y):
         return 1 - self.bubble_distances[x.bubble, y.bubble] * self.args.quality_loss
-
-def get_single_color(x):
-    return np.array([(x[0] + 1) / 2, 1.0 - 0.25*(x[0]+1 + x[1]+1), (x[1]+1)/2])
-
-def opinion_color(xs):
-    for x in xs:
-        if x.is_source or x.is_lobby:
-            return np.array([0, 1.0, 0])
-        if x.is_politician:
-            return np.array([0, 0, 1.0])
-
-    color = get_single_color(xs[0].pos)
-    assert all(all(get_single_color(x.pos) == color) for x in xs)
-    return color
-
-def opinion_sorter(xs, os):
-    for x in xs:
-        if os[x].is_politician or os[x].is_source:
-            return 2.0
-    return 1.0
 
 def firmness_color(xs):
     for x in xs:
@@ -490,9 +469,8 @@ def update(num, Updater, axes, fig, args, draw):
     return axes
 
 update_funcs = {Update.Average: move_towards_average, Update.Inverse: inverse_force}
-color_funcs = {Color_Func.Opinion: opinion_color, Color_Func.Firmness: firmness_color, Color_Func.Charisma: charisma_color}
-sorter_funcs = {Color_Func.Opinion: opinion_sorter, Color_Func.Firmness: firmness_sorter, Color_Func.Charisma: charisma_sorter}
-
+color_funcs = {Color_Func.Firmness: firmness_color, Color_Func.Charisma: charisma_color}
+sorter_funcs = {Color_Func.Firmness: firmness_sorter, Color_Func.Charisma: charisma_sorter}
 
 def animate(args = Arguments()):
     G = nx.empty_graph(args.population)
