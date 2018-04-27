@@ -21,7 +21,7 @@ class Color_Func(Enum):
     Charisma = 'charisma'
 
 class Arguments:
-    def __init__(self):
+    def __init__(self, **kwargs):
         self.dunbar = 5
         self.population=100
         self.snapshot=set()
@@ -48,6 +48,9 @@ class Arguments:
         self.charisma = 1.0
         self.color_func = Color_Func.Firmness
         self.lobby_charisma_hack = None
+
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
 def get_firmness(args, is_source, is_lobby, is_politician):
     if is_source or is_lobby or is_politician:
