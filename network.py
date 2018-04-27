@@ -84,12 +84,12 @@ class Opinion:
         if is_lobby:
             if lobby_charisma_hack is not None:
                 assert charisma == lobby_charisma_hack
-                self.pos:Position = np.array([0 for d in range(dimensions)])
+                self.pos = np.array([0 for d in range(dimensions)])
             else:
-                self.pos:Position = np.array([(random()*2 - 1 if d == lobby_dimension else 0) for d in range(dimensions)])
+                self.pos = np.array([(random()*2 - 1 if d == lobby_dimension else 0) for d in range(dimensions)])
         else:
             assert lobby_charisma_hack is None
-            self.pos:Position = np.array([random()*2 - 1 for _ in range(dimensions)])
+            self.pos = np.array([random()*2 - 1 for _ in range(dimensions)])
         self.charisma = charisma
         self.firmness = firmness
         self.bubble = bubble
