@@ -1,12 +1,8 @@
 import networkx as nx
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
-from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 from random import random, choice
 import numpy as np
-import colorsys
-from copy import copy, deepcopy
-from functools import partial
 from matplotlib.collections import LineCollection
 import csv
 from enum import Enum
