@@ -31,7 +31,6 @@ class Arguments:
         self.show=True
         self.save=False
         self.vid_name=""
-        self.num_sources = 0
         self.attract_strength = 0.001
         self.repel_strength = 0
         self.use_parties = False
@@ -52,8 +51,8 @@ class Arguments:
         for key, value in kwargs.items():
             setattr(self, key, value)
 
-def get_firmness(args, is_source, is_lobby, is_politician):
-    if is_source or is_lobby or is_politician:
+def get_firmness(args, is_lobby, is_politician):
+    if is_lobby or is_politician:
         return 1.0
 
     if args.firmness_type == Firmness.Fixed:
@@ -65,8 +64,8 @@ def get_firmness(args, is_source, is_lobby, is_politician):
     else:
         assert False
 
-def get_charisma(args, is_source, is_lobby, is_politician, lobby_charisma_hack):
-    if is_source or is_lobby or is_politician:
+def get_charisma(args, is_lobby, is_politician, lobby_charisma_hack):
+    if is_lobby or is_politician:
         if lobby_charisma_hack is not None:
             assert is_lobby
             return lobby_charisma_hack
@@ -81,7 +80,7 @@ def get_charisma(args, is_source, is_lobby, is_politician, lobby_charisma_hack):
         assert False
 
 class Opinion:
-    def __init__(self, dimensions, charisma, firmness, bubble, is_source, is_politician, is_lobby, lobby_dimension, lobby_charisma_hack):
+    def __init__(self, dimensions, charisma, firmness, bubble, is_politician, is_lobby, lobby_dimension, lobby_charisma_hack):
         if is_lobby:
             if lobby_charisma_hack is not None:
                 assert charisma == lobby_charisma_hack
@@ -94,8 +93,7 @@ class Opinion:
         self.charisma = charisma
         self.firmness = firmness
         self.bubble = bubble
-        assert sum([is_source, is_politician, is_lobby]) <= 1
-        self.is_source = is_source
+        assert sum([is_politician, is_lobby]) <= 1
         self.is_politician = is_politician
         self.is_lobby = is_lobby
         assert lobby_dimension < dimensions
@@ -168,17 +166,16 @@ class OpinionClass:
 
     def new_opinion(self, index):
         bubble = index % self.args.bubbles
-        assert self.args.num_politicians + self.args.num_sources + self.args.num_lobbies <= self.args.population // self.args.bubbles
+        assert self.args.num_politicians + self.args.num_lobbies <= self.args.population // self.args.bubbles
         is_politician = index < self.args.bubbles * self.args.num_politicians
-        is_source = index < self.args.bubbles * (self.args.num_sources + self.args.num_politicians) and not is_politician
-        is_lobby = index < self.args.bubbles * (self.args.num_sources + self.args.num_politicians + self.args.num_lobbies) and not is_politician and not is_source
+        is_lobby = index < self.args.bubbles * (self.args.num_politicians + self.args.num_lobbies) and not is_politician
 
         lobby_charisma_hack = None
         if is_lobby:
             lobby_charisma_hack = self.args.lobby_charisma_hack
 
-        firmness = get_firmness(self.args, is_source, is_lobby, is_politician)
-        charisma = get_charisma(self.args, is_source, is_lobby, is_politician, lobby_charisma_hack)
+        firmness = get_firmness(self.args, is_lobby, is_politician)
+        charisma = get_charisma(self.args, is_lobby, is_politician, lobby_charisma_hack)
 
         if is_lobby:
             if self.args.lobby_charisma_hack is not None:
@@ -188,7 +185,7 @@ class OpinionClass:
         else:
             lobby_dimension = -1
 
-        return Opinion(self.args.dimensions, charisma, firmness, bubble, is_source, is_politician, is_lobby, lobby_dimension, lobby_charisma_hack)
+        return Opinion(self.args.dimensions, charisma, firmness, bubble, is_politician, is_lobby, lobby_dimension, lobby_charisma_hack)
 
     def get_midline(self, x, y):
         return get_midline(x.pos, y.pos)
@@ -207,7 +204,7 @@ class OpinionClass:
 
 def firmness_color(xs):
     for x in xs:
-        if x.is_source or x.is_lobby:
+        if x.is_lobby:
             return np.array([0, 1.0, 0])
         if x.is_politician:
             return np.array([0, 0, 1.0])
@@ -216,13 +213,13 @@ def firmness_color(xs):
 
 def firmness_sorter(xs, os):
     for x in xs:
-        if os[x].is_politician or os[x].is_source:
+        if os[x].is_politician:
             return 2.0
     return max(os[x].firmness for x in xs)
 
 def charisma_color(xs):
     for x in xs:
-        if x.is_source or x.is_lobby:
+        if x.is_lobby:
             return np.array([0, 1.0, 0])
         if x.is_politician:
             return np.array([0, 0, 1.0])
@@ -231,7 +228,7 @@ def charisma_color(xs):
 
 def charisma_sorter(xs, os):
     for x in xs:
-        if os[x].is_politician or os[x].is_source:
+        if os[x].is_politician:
             return 2.0
     return max(os[x].charisma for x in xs)
 
@@ -249,12 +246,10 @@ def get_midline(a, b):
 
 class AgentClass:
     def __init__(self, args):
-        assert args.num_sources <= args.population
         self.args = args
         self.OpinionClass = OpinionClass(args)
         self.opinions = {x : self.OpinionClass.new_opinion(x) for x in range(args.population)}
         assert args.noise >= 0 and args.noise <= 1
-        assert args.num_sources == 0 or not args.use_parties
         self.current_party_interval = 1
 
     def positions(self, G):
@@ -277,7 +272,7 @@ class AgentClass:
         return [o for o in self.opinions.values() if o.is_politician and o.bubble == axis]
 
     def get_voters(self, axis):
-        return [o for o in self.opinions.values() if o.bubble == axis and not o.is_politician and not o.is_source]
+        return [o for o in self.opinions.values() if o.bubble == axis and not o.is_politician]
 
     def draw_parties(self, axis, ax):
         if not self.args.use_parties:
@@ -408,7 +403,7 @@ class UpdateClass:
     def update(self, axes, draw):
         self.Agents.update_parties()
         for x in self.G:
-            if self.Agents.opinions[x].is_source or self.Agents.opinions[x].is_lobby:
+            if self.Agents.opinions[x].is_lobby:
                 pass
             elif self.Agents.opinions[x].is_politician and self.args.use_parties:
                 pass
