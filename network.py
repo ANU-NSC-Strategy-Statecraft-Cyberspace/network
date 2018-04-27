@@ -16,10 +16,6 @@ class Selectivity(Enum):
     Recommend = 'recommend'
     Selective = 'selective'
 
-class Layout(Enum):
-    Spring = 'spring'
-    Opinion = 'opinion'
-
 class Update(Enum):
     Average = 'average'
     Inverse = 'inverse'
@@ -51,7 +47,6 @@ class Arguments:
         self.show=True
         self.save=False
         self.vid_name=""
-        self.layout = Layout.Opinion
         self.num_sources = 0
         self.update_func = Update.Inverse
         self.attract_strength = 0.001
@@ -301,53 +296,24 @@ def get_midline(a, b):
         f = (lambda x: midpoint[1] + (x - midpoint[0]) * slope)
         return (-2, 2), (f(-2), f(2))
 
-class LayoutClass:
-    def __init__(self):
-        assert False
-        self.xlim = []
-        self.ylim = []
-
-    def positions(self, layoutpos, G, opinions, opinion_class):
-        assert False
-        return {}
-
-class SpringLayout(LayoutClass):
-    def __init__(self):
-        self.xlim = [-0.25,1.25]
-        self.ylim = [-0.25,1.25]
-
-    def positions(self, layoutpos, G, opinions, opinion_class):
-        return nx.spring_layout(G, pos=layoutpos, iterations=10, k=0.5/np.sqrt(len(layoutpos)))
-
-class OpinionLayout(LayoutClass):
-    def __init__(self):
-        self.xlim = [-1.1,1.1]
-        self.ylim = [-1.1,1.1]
-
-    def positions(self, layoutpos, G, opinions, opinion_class):
-        return {x : o.pos for x,o in opinions.items()}
-
 class AgentClass:
     def __init__(self, args):
         assert args.num_sources <= args.population
         self.args = args
         self.OpinionClass = OpinionClass(args)
         self.opinions = {x : self.OpinionClass.new_opinion(x) for x in range(args.population)}
-        self.layoutpos = None
-        self.LayoutClass = graph_layout[args.layout]
         assert args.noise >= 0 and args.noise <= 1
         assert args.num_sources == 0 or not args.use_parties
         self.current_party_interval = 1
 
     def positions(self, G):
-        self.layoutpos = self.LayoutClass.positions(self.layoutpos, G, self.opinions, self.OpinionClass)
-        return self.layoutpos
+        return {x : o.pos for x,o in self.opinions.items()}
 
     def get_xlim(self):
-        return self.LayoutClass.xlim
+        return [-1.1,1.1]
 
     def get_ylim(self):
-        return self.LayoutClass.ylim
+        return [-1.1,1.1]
 
     def opinion_distance(self, x, y):
         return self.OpinionClass.opinion_distance(self.opinions[x], self.opinions[y])
@@ -367,7 +333,6 @@ class AgentClass:
             return
         assert self.args.dimensions == 2
         assert self.args.num_politicians == 2
-        assert isinstance(self.LayoutClass, OpinionLayout)
         a,b = self.get_politicians(axis)
         linex, liney = self.OpinionClass.get_midline(a, b)
         voters = self.get_voters(axis)
@@ -583,7 +548,6 @@ class UpdateRec(UpdateClass):
 
 
 selectivity_funcs = {Selectivity.Nothing: UpdateNone, Selectivity.Recommend: UpdateRec, Selectivity.Selective: UpdateHigh}
-graph_layout = {Layout.Spring: SpringLayout(), Layout.Opinion: OpinionLayout()}
 update_funcs = {Update.Average: move_towards_average, Update.Inverse: inverse_force}
 color_funcs = {Color_Func.Opinion: opinion_color, Color_Func.Firmness: firmness_color, Color_Func.Charisma: charisma_color}
 sorter_funcs = {Color_Func.Opinion: opinion_sorter, Color_Func.Firmness: firmness_sorter, Color_Func.Charisma: charisma_sorter}
