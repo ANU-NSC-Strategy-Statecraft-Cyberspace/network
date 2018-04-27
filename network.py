@@ -7,18 +7,38 @@ from matplotlib.collections import LineCollection
 import csv
 from enum import Enum
 
-class Firmness(Enum):
-    Fixed = 'fixed'
-    Random = 'random'
-    Inverse = 'inverse'
+lobby_color = np.array([0, 1.0, 0])
+party_color = np.array([0, 1.0, 0])
+default_color = np.array([0, 0, 0])
+high_charisma_color = np.array([0, 0, 1.0])
+high_firmness_color = np.array([1.0, 0, 0])
+high_charisma_and_firmness_color = np.array([1.0, 0, 1.0])
 
-class Charisma(Enum):
-    Fixed = 'fixed'
-    Random = 'random'
+def get_lobby_color(o):
+    return lobby_color
 
-class Color_Func(Enum):
-    Firmness = 'firmness'
-    Charisma = 'charisma'
+def get_color(xs):
+    has_politician = False
+    has_high_charisma = False
+    has_high_firmness = False
+
+    for x in xs:
+        if x.is_politician:
+            has_politician = True
+        if x.high_charisma:
+            has_high_charisma = True
+        if x.high_firmness:
+            has_high_firmness = True
+
+    if has_politician:
+        return party_color
+    if has_high_charisma and has_high_firmness:
+        return high_charisma_and_firmness_color
+    if has_high_charisma:
+        return high_charisma_color
+    if has_high_firmness:
+        return high_firmness_color
+    return default_color
 
 class Arguments:
     def __init__(self, **kwargs):
@@ -41,11 +61,10 @@ class Arguments:
         self.quality_loss = 0.5
         self.bubbles=4
         self.dimensions=2
-        self.firmness_type = Firmness.Fixed
-        self.firmness = 0.1
-        self.charisma_type = Charisma.Fixed
-        self.charisma = 1.0
-        self.color_func = Color_Func.Firmness
+        self.low_firmness = 0.1
+        self.high_firmness = 0.9
+        self.low_charisma = 1.0
+        self.high_charisma = 1.0
         self.lobby_charisma_hack = None
 
         for key, value in kwargs.items():
@@ -53,34 +72,24 @@ class Arguments:
 
 def get_firmness(args, is_lobby, is_politician):
     if is_lobby or is_politician:
-        return 1.0
+        return 1.0, False
 
-    if args.firmness_type == Firmness.Fixed:
-        return args.firmness
-    elif args.firmness_type == Firmness.Random:
-        return random()
-    elif args.firmness_type == Firmness.Inverse:
-        return choice([args.firmness, 1.0 - args.firmness])
-    else:
-        assert False
+    firmness = choice([args.low_firmness, args.high_firmness])
+    return firmness, firmness != args.low_firmness
 
 def get_charisma(args, is_lobby, is_politician, lobby_charisma_hack):
     if is_lobby or is_politician:
         if lobby_charisma_hack is not None:
             assert is_lobby
-            return lobby_charisma_hack
+            return lobby_charisma_hack, False
         else:
-            return 1.0
+            return 1.0, False
     assert lobby_charisma_hack is None
-    if args.charisma_type == Charisma.Fixed:
-        return args.charisma
-    elif args.charisma_type == Charisma.Random:
-        return random()
-    else:
-        assert False
+    charisma = choice([args.low_charisma, args.high_charisma])
+    return charisma, charisma != args.low_charisma
 
 class Opinion:
-    def __init__(self, dimensions, charisma, firmness, bubble, is_politician, is_lobby, lobby_dimension, lobby_charisma_hack):
+    def __init__(self, dimensions, charisma, high_charisma, firmness, high_firmness, bubble, is_politician, is_lobby, lobby_dimension, lobby_charisma_hack):
         if is_lobby:
             if lobby_charisma_hack is not None:
                 assert charisma == lobby_charisma_hack
@@ -91,7 +100,9 @@ class Opinion:
             assert lobby_charisma_hack is None
             self.pos = np.array([random()*2 - 1 for _ in range(dimensions)])
         self.charisma = charisma
+        self.high_charisma = high_charisma
         self.firmness = firmness
+        self.high_firmness = high_firmness
         self.bubble = bubble
         assert sum([is_politician, is_lobby]) <= 1
         self.is_politician = is_politician
@@ -149,8 +160,6 @@ class OpinionClass:
     def __init__(self, args):
         self.update_func = inverse_force(args)
         self.args = args
-        self.get_color = color_funcs[args.color_func]
-        self.nodesorter = sorter_funcs[args.color_func]
         self.bubble_distances = np.ones((args.bubbles,args.bubbles))-np.eye(args.bubbles)
         assert not args.use_parties or args.num_politicians == 2
 
@@ -174,8 +183,8 @@ class OpinionClass:
         if is_lobby:
             lobby_charisma_hack = self.args.lobby_charisma_hack
 
-        firmness = get_firmness(self.args, is_lobby, is_politician)
-        charisma = get_charisma(self.args, is_lobby, is_politician, lobby_charisma_hack)
+        firmness, high_firmness = get_firmness(self.args, is_lobby, is_politician)
+        charisma, high_charisma = get_charisma(self.args, is_lobby, is_politician, lobby_charisma_hack)
 
         if is_lobby:
             if self.args.lobby_charisma_hack is not None:
@@ -185,7 +194,7 @@ class OpinionClass:
         else:
             lobby_dimension = -1
 
-        return Opinion(self.args.dimensions, charisma, firmness, bubble, is_politician, is_lobby, lobby_dimension, lobby_charisma_hack)
+        return Opinion(self.args.dimensions, charisma, high_charisma, firmness, high_firmness, bubble, is_politician, is_lobby, lobby_dimension, lobby_charisma_hack)
 
     def get_midline(self, x, y):
         return get_midline(x.pos, y.pos)
@@ -201,36 +210,6 @@ class OpinionClass:
 
     def quality(self, x, y):
         return 1 - self.bubble_distances[x.bubble, y.bubble] * self.args.quality_loss
-
-def firmness_color(xs):
-    for x in xs:
-        if x.is_lobby:
-            return np.array([0, 1.0, 0])
-        if x.is_politician:
-            return np.array([0, 0, 1.0])
-
-    return np.array([max(x.firmness for x in xs), 0, 0])
-
-def firmness_sorter(xs, os):
-    for x in xs:
-        if os[x].is_politician:
-            return 2.0
-    return max(os[x].firmness for x in xs)
-
-def charisma_color(xs):
-    for x in xs:
-        if x.is_lobby:
-            return np.array([0, 1.0, 0])
-        if x.is_politician:
-            return np.array([0, 0, 1.0])
-
-    return np.array([max(x.charisma for x in xs), 0, 0])
-
-def charisma_sorter(xs, os):
-    for x in xs:
-        if os[x].is_politician:
-            return 2.0
-    return max(os[x].charisma for x in xs)
 
 def get_midline(a, b):
     assert any(a != b)
@@ -294,7 +273,7 @@ class AgentClass:
         for o in self.opinions.values():
             if o.is_lobby and o.bubble == axis:
                 linex, liney = o.get_lobby_line()
-                ax.plot(linex, liney, color=self.OpinionClass.get_color([o]), alpha=0.5, linewidth=1)
+                ax.plot(linex, liney, color=get_lobby_color(o), alpha=0.5, linewidth=1)
 
         edge_pos = []
         edge_colors = []
@@ -361,9 +340,8 @@ class AgentClass:
         positions = self.positions(G)
         positions_filtered = {x: p for x,p in positions.items() if self.opinions[x].bubble == axis and not self.opinions[x].is_lobby}
         unique_positions = self.get_duplicate_lists(positions_filtered)
-        colors = {xs[0] : self.OpinionClass.get_color([self.opinions[x] for x in xs]) for xs in unique_positions}
+        colors = {xs[0] : get_color([self.opinions[x] for x in xs]) for xs in unique_positions}
         sizes = {xs[0] : self.get_size(xs) for xs in unique_positions}
-        unique_positions.sort(key=lambda xs: self.OpinionClass.nodesorter(xs, {x : self.opinions[x] for x in xs}))
         nodes = [xs[0] for xs in unique_positions if self.opinions[xs[0]].bubble == axis]
         edges = [e for e in G.edges() if (self.opinions[e[0]].bubble == axis or self.opinions[e[1]].bubble == axis) and not (self.opinions[e[0]].is_lobby or self.opinions[e[1]].is_lobby)]
         edge_colors = [within_region if (self.opinions[e[0]].bubble == self.opinions[e[1]].bubble) else between_region for e in edges]
@@ -441,9 +419,6 @@ def update(num, Updater, axes, fig, args, draw):
         assert len(args.snapshot_name) > 0
         fig.savefig('{}-figure-{}.png'.format(args.snapshot_name, num))
     return axes
-
-color_funcs = {Color_Func.Firmness: firmness_color, Color_Func.Charisma: charisma_color}
-sorter_funcs = {Color_Func.Firmness: firmness_sorter, Color_Func.Charisma: charisma_sorter}
 
 def animate(args = Arguments()):
     G = nx.empty_graph(args.population)
