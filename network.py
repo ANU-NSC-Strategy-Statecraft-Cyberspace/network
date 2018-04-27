@@ -11,10 +11,6 @@ from matplotlib.collections import LineCollection
 import csv
 from enum import Enum
 
-class Update(Enum):
-    Average = 'average'
-    Inverse = 'inverse'
-
 class Firmness(Enum):
     Fixed = 'fixed'
     Random = 'random'
@@ -40,7 +36,6 @@ class Arguments:
         self.save=False
         self.vid_name=""
         self.num_sources = 0
-        self.update_func = Update.Inverse
         self.attract_strength = 0.001
         self.repel_strength = 0
         self.repel_extreme_factor = 0
@@ -131,17 +126,6 @@ class Opinion:
         else:
             assert False
 
-def move_towards_average(args):
-    def update_func(x, ys, firmness, charismas):
-        assert firmness >= 0 and firmness <= 1.0
-        assert len(charismas) == len(ys)
-        assert all(c >= 0 and c <= 1.0 for c in charismas)
-        if len(ys) > 0:
-            return sum(y * c * firmness + x*(1 - firmness) for y, c in zip(ys, charismas)) / sum(c * firmness + 1 - firmness for c in charismas)
-        else:
-            return np.clip(x, -1, 1)
-    return update_func
-
 # y_t = sqrt(y_0^2 - 2*k*t*m1*m2 + z*y_0^2)
 def inverse_force(args):
     k=args.attract_strength
@@ -170,7 +154,7 @@ def inverse_force(args):
 
 class OpinionClass:
     def __init__(self, args):
-        self.update_func = update_funcs[args.update_func](args)
+        self.update_func = inverse_force(args)
         self.args = args
         self.get_color = color_funcs[args.color_func]
         self.nodesorter = sorter_funcs[args.color_func]
@@ -468,7 +452,6 @@ def update(num, Updater, axes, fig, args, draw):
         fig.savefig('{}-figure-{}.png'.format(args.snapshot_name, num))
     return axes
 
-update_funcs = {Update.Average: move_towards_average, Update.Inverse: inverse_force}
 color_funcs = {Color_Func.Firmness: firmness_color, Color_Func.Charisma: charisma_color}
 sorter_funcs = {Color_Func.Firmness: firmness_sorter, Color_Func.Charisma: charisma_sorter}
 
