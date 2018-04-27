@@ -1,11 +1,8 @@
 import networkx as nx
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
-from random import random, choice
 import numpy as np
-from matplotlib.collections import LineCollection
-import csv
-from enum import Enum
+from network import Context
 
 class Arguments:
     def __init__(self, **kwargs):
@@ -50,8 +47,8 @@ class Arguments:
             setattr(self, key, value)
 
 
-def update(num, Updater, axes, fig, args, draw):
-    axes = Updater.update(axes, draw)
+def update(num, context, axes, fig, args, draw):
+    axes = context.update(axes, draw)
     if draw:
         fig.suptitle('Step: {}'.format(num))
     if num in args.snapshot:
@@ -61,15 +58,13 @@ def update(num, Updater, axes, fig, args, draw):
     return axes
 
 def animate(args = Arguments()):
-    G = nx.empty_graph(args.population)
-    Agents = AgentClass(args)
-    Updater = UpdateClass(Agents, G, args)
+    context = Context(args)
     gridsize = int(np.ceil(np.sqrt(args.regions)))
     fig, axes_array = plt.subplots(gridsize, gridsize, squeeze=False)
     axes = axes_array.flatten()
     for ax in axes:
         ax.set_aspect('equal')
-    graph_ani = animation.FuncAnimation(fig, update, args.steps, fargs=(Updater, axes, fig, args, True), interval=100, blit=False, repeat=False)
+    graph_ani = animation.FuncAnimation(fig, update, args.steps, fargs=(context, axes, fig, args, True), interval=100, blit=False, repeat=False)
     if args.show:
         plt.show()
     if args.save:
@@ -78,18 +73,16 @@ def animate(args = Arguments()):
 
 
 def run_simulation(args, components=None, histogram_x=None):
-    G = nx.empty_graph(args.population)
-    Agents = AgentClass(args)
-    Updater = UpdateClass(Agents, G, args)
+    context = Context(args)
     for n in range(args.steps):
-        update(n, Updater, [], None, args, False)
+        update(n, context, [], None, args, False)
         if components is not None:
-            ccs = list(nx.connected_components(G))
-            result = [sum(1 for cc in ccs if any(Agents.opinions[node].region == i for node in cc)) for i in range(args.regions)]
+            ccs = list(nx.connected_components(context.G))
+            result = [sum(1 for cc in ccs if any(context.agents.opinions[node].region == i for node in cc)) for i in range(args.regions)]
             components.append(result)
         if histogram_x is not None:
             result = [0 for _ in range(100)]
-            for o in Agents.opinions.values():
+            for o in context.agents.opinions.values():
                 if not o.is_lobby:
                     fl = np.floor((o.pos[0]+1)*50.0)
                     if fl >= 100:
@@ -187,13 +180,13 @@ def make_figures():
 
 ## new diagrams:
 def run_diagrams():
-    animate(Arguments(firmness_type=Firmness.Inverse, num_politicians=0, use_parties=False, num_lobbies=2, regions=1, quality_loss=0.5,  snapshot={10,200}, snapshot_name='A-lobbies', steps=201))
-    animate(Arguments(firmness_type=Firmness.Inverse, num_politicians=0, use_parties=False, num_lobbies=0, regions=4, quality_loss=0.5,  snapshot={10,200}, snapshot_name='A-connect', steps=201))
-    animate(Arguments(firmness_type=Firmness.Inverse, num_politicians=0, use_parties=False, num_lobbies=0, regions=4, quality_loss=0.99, snapshot={10,200}, snapshot_name='A-apart',   steps=201))
-    animate(Arguments(firmness_type=Firmness.Inverse, num_politicians=2, use_parties=True,  num_lobbies=0, regions=1, quality_loss=0.5,  snapshot={10,200}, snapshot_name='A-parties', steps=201))
+    animate(Arguments(num_politicians=0, use_parties=False, num_lobbies=2, regions=1, quality_loss=0.5,  snapshot={10,200}, snapshot_name='A-lobbies', steps=201))
+    animate(Arguments(num_politicians=0, use_parties=False, num_lobbies=0, regions=4, quality_loss=0.5,  snapshot={10,200}, snapshot_name='A-connect', steps=201))
+    animate(Arguments(num_politicians=0, use_parties=False, num_lobbies=0, regions=4, quality_loss=0.99, snapshot={10,200}, snapshot_name='A-apart',   steps=201))
+    animate(Arguments(num_politicians=2, use_parties=True,  num_lobbies=0, regions=1, quality_loss=0.5,  snapshot={10,200}, snapshot_name='A-parties', steps=201))
 
 def video_diagrams():
-    animate(Arguments(firmness_type=Firmness.Inverse, num_politicians=0, use_parties=False, num_lobbies=2, regions=1, quality_loss=0.5,  steps=201, show=False, save=True, vid_name="A-lobbies-vid"))
-    #animate(Arguments(firmness_type=Firmness.Inverse, num_politicians=0, use_parties=False, num_lobbies=0, regions=4, quality_loss=0.5,  steps=201, show=False, save=True, vid_name="A-connect-vid"))
-    #animate(Arguments(firmness_type=Firmness.Inverse, num_politicians=0, use_parties=False, num_lobbies=0, regions=4, quality_loss=0.99, steps=201, show=False, save=True, vid_name="A-apart-vid"))
-    #animate(Arguments(firmness_type=Firmness.Inverse, num_politicians=2, use_parties=True,  num_lobbies=0, regions=1, quality_loss=0.5,  steps=201, show=False, save=True, vid_name="A-parties-vid"))
+    animate(Arguments(num_politicians=0, use_parties=False, num_lobbies=2, regions=1, quality_loss=0.5,  steps=201, show=False, save=True, vid_name="A-lobbies-vid"))
+    #animate(Arguments(num_politicians=0, use_parties=False, num_lobbies=0, regions=4, quality_loss=0.5,  steps=201, show=False, save=True, vid_name="A-connect-vid"))
+    #animate(Arguments(num_politicians=0, use_parties=False, num_lobbies=0, regions=4, quality_loss=0.99, steps=201, show=False, save=True, vid_name="A-apart-vid"))
+    #animate(Arguments(num_politicians=2, use_parties=True,  num_lobbies=0, regions=1, quality_loss=0.5,  steps=201, show=False, save=True, vid_name="A-parties-vid"))

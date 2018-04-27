@@ -1,11 +1,7 @@
 import networkx as nx
-import matplotlib.animation as animation
-import matplotlib.pyplot as plt
 from random import random, choice
 import numpy as np
 from matplotlib.collections import LineCollection
-import csv
-from enum import Enum
 
 lobby_color = np.array([0, 1.0, 0])
 party_color = np.array([0, 1.0, 0])
@@ -205,12 +201,6 @@ class AgentClass:
     def positions(self, G):
         return {x : o.pos for x,o in self.opinions.items()}
 
-    def get_xlim(self):
-        return [-1.1,1.1]
-
-    def get_ylim(self):
-        return [-1.1,1.1]
-
     def opinion_distance(self, x, y):
         return self.OpinionClass.opinion_distance(self.opinions[x], self.opinions[y])
 
@@ -322,10 +312,10 @@ class AgentClass:
 within_region = (0.0, 0.0, 0.0, 1.0)
 between_region = (1.0, 0.0, 0.0, 0.3)
 
-class UpdateClass:
-    def __init__(self, Agents, G, args):
-        self.Agents = Agents
-        self.G = G
+class Context:
+    def __init__(self, args):
+        self.agents = AgentClass(args)
+        self.G = nx.empty_graph(args.population)
         self.args = args
 
     """ Under the dunbar number, agents make connections in strict order of close opinions
@@ -371,8 +361,8 @@ class UpdateClass:
         if draw:
             for i, ax in enumerate(axes):
                 ax.clear()
-                ax.set_xlim(self.Agents.get_xlim())
-                ax.set_ylim(self.Agents.get_ylim())
+                ax.set_xlim([-1.1,1.1])
+                ax.set_ylim([-1.1,1.1])
                 nodelist, edgelist, pos, colors, edge_colors, sizes = self.Agents.get_node_draw_data(self.G, i)
                 self.Agents.draw_lobbies(self.G, i, ax)
                 nx.draw_networkx(self.G, pos=pos, nodelist=nodelist, edgelist=edgelist, ax=ax, node_color=colors, edge_color=edge_colors, node_size=sizes, with_labels=False, alpha=None)
