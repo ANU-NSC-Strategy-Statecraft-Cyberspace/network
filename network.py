@@ -11,11 +11,6 @@ from matplotlib.collections import LineCollection
 import csv
 from enum import Enum
 
-class Selectivity(Enum):
-    Nothing = 'none'
-    Recommend = 'recommend'
-    Selective = 'selective'
-
 class Update(Enum):
     Average = 'average'
     Inverse = 'inverse'
@@ -41,8 +36,6 @@ class Arguments:
         self.snapshot=set()
         self.snapshot_name=''
         self.steps=500
-        self.selectivity = Selectivity.Selective
-        self.rec_factor=0
         self.noise=0
         self.show=True
         self.save=False
@@ -432,19 +425,27 @@ class UpdateClass:
         self.Agents = Agents
         self.G = G
         self.args = args
-        self.assert_all()
 
-    def assert_all(self):
-        pass
+    """ Under the dunbar number, agents make connections in strict order of close opinions
+        Over the dunbar number, agents break connections with the least shared opinion
+        At the dunbar number, agents randomly probe for other neighbours with closer opinions
+    """
 
     def above_dunbar(self, x):
-        pass
+        self.G.remove_edge(x,max(self.G[x], key=lambda y: self.Agents.opinion_distance(x,y)))
 
     def below_dunbar(self, x):
-        pass
+        candidates = [y for y in self.G if y != x and y not in self.G[x]]
+        if candidates:
+            winner = self.G.add_edge(x,min(candidates, key=lambda y: self.Agents.opinion_distance(x,y)))
 
     def at_dunbar(self, x):
-        pass
+        if self.G[x]:
+            y = choice(list(self.G.nodes))
+            z = choice(list(self.G[x].keys()))
+            if y != x and self.Agents.opinion_distance(x,y) < self.Agents.opinion_distance(x,z):
+                self.G.add_edge(x,y)
+                self.G.remove_edge(x,z)
 
     def update(self, axes, draw):
         self.Agents.update_parties()
@@ -488,66 +489,6 @@ def update(num, Updater, axes, fig, args, draw):
         fig.savefig('{}-figure-{}.png'.format(args.snapshot_name, num))
     return axes
 
-class UpdateNone(UpdateClass):
-    """ Under the dunbar number, agents make connections at random with anyone within range
-        Over the dunbar number, agents break connections at random
-        At the dunbar number, agents do nothing
-    """
-    def assert_all(self):
-        assert self.args.rec_factor == 0
-
-    def above_dunbar(self, x):
-        self.G.remove_edge(x,choice(self.G.neighbors(x)))
-
-    def below_dunbar(self, x):
-        y = choice(self.G.nodes())
-        if y != x:
-            self.G.add_edge(x,y)
-
-class UpdateHigh(UpdateClass):
-    """ Under the dunbar number, agents make connections in strict order of close opinions
-        Over the dunbar number, agents break connections with the least shared opinion
-        At the dunbar number, agents randomly probe for other neighbours with closer opinions
-    """
-    def assert_all(self):
-        assert self.args.rec_factor == 0
-
-    def above_dunbar(self, x):
-        self.G.remove_edge(x,max(self.G[x], key=lambda y: self.Agents.opinion_distance(x,y)))
-
-    def below_dunbar(self, x):
-        candidates = [y for y in self.G if y != x and y not in self.G[x]]
-        if candidates:
-            winner = self.G.add_edge(x,min(candidates, key=lambda y: self.Agents.opinion_distance(x,y)))
-
-    def at_dunbar(self, x):
-        if self.G[x]:
-            y = choice(list(self.G.nodes))
-            z = choice(list(self.G[x].keys()))
-            if y != x and self.Agents.opinion_distance(x,y) < self.Agents.opinion_distance(x,z):
-                self.G.add_edge(x,y)
-                self.G.remove_edge(x,z)
-
-class UpdateRec(UpdateClass):
-    """ Under the dunbar number, agents make with the closest opinion or at random with probability rec_factor
-        Over the dunbar number, agents break connections with the least shared opinion
-        At the dunbar number, agents randomly probe for other neighbours with closer opinions
-    """
-    def assert_all(self):
-        assert self.args.rec_factor >= 0 and self.args.rec_factor <= 1
-
-    above_dunbar = UpdateHigh.above_dunbar
-
-    def below_dunbar(self, x):
-        if random() < self.args.rec_factor:
-            UpdateNone.below_dunbar(self,x)
-        else:
-            UpdateHigh.below_dunbar(self,x)
-
-    at_dunbar = UpdateHigh.at_dunbar
-
-
-selectivity_funcs = {Selectivity.Nothing: UpdateNone, Selectivity.Recommend: UpdateRec, Selectivity.Selective: UpdateHigh}
 update_funcs = {Update.Average: move_towards_average, Update.Inverse: inverse_force}
 color_funcs = {Color_Func.Opinion: opinion_color, Color_Func.Firmness: firmness_color, Color_Func.Charisma: charisma_color}
 sorter_funcs = {Color_Func.Opinion: opinion_sorter, Color_Func.Firmness: firmness_sorter, Color_Func.Charisma: charisma_sorter}
@@ -556,7 +497,7 @@ sorter_funcs = {Color_Func.Opinion: opinion_sorter, Color_Func.Firmness: firmnes
 def animate(args = Arguments()):
     G = nx.empty_graph(args.population)
     Agents = AgentClass(args)
-    Updater = selectivity_funcs[args.selectivity](Agents, G, args)
+    Updater = UpdateClass(Agents, G, args)
     gridsize = int(np.ceil(np.sqrt(args.bubbles)))
     fig, axes_array = plt.subplots(gridsize, gridsize, squeeze=False)
     axes = axes_array.flatten()
@@ -573,7 +514,7 @@ def animate(args = Arguments()):
 def run_simulation(args, components=None, histogram_x=None):
     G = nx.empty_graph(args.population)
     Agents = AgentClass(args)
-    Updater = selectivity_funcs[args.selectivity](Agents, G, args)
+    Updater = UpdateClass(Agents, G, args)
     for n in range(args.steps):
         update(n, Updater, [], None, args, False)
         if components is not None:
