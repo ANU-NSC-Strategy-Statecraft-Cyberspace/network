@@ -18,6 +18,7 @@ def get_lobby_color(o):
     return lobby_color
 
 def get_color(xs):
+    """ Returns the colour for a list of Opinions xs occupying the same point """
     has_politician = False
     has_high_charisma = False
     has_high_firmness = False
@@ -42,29 +43,38 @@ def get_color(xs):
 
 class Arguments:
     def __init__(self, **kwargs):
-        self.dunbar = 5
-        self.population=100
-        self.snapshot=set()
-        self.snapshot_name=''
-        self.steps=500
-        self.noise=0
-        self.show=True
-        self.save=False
-        self.vid_name=""
-        self.attract_strength = 0.001
-        self.repel_strength = 0
+        ##### Population properties
+        self.dunbar = 5     # Dunbar number: how many connections normal agents want
+        self.population=100 # Number of agents in the game
+        self.regions=4      # Number of geographical regions agents are separated into
+        self.dimensions=2   # Number of opinion dimensions (only 2 can be displayed, but more or less can be simulated if show=False and save=False)
+
+        ##### Simulation properties
+        self.snapshot=set()    # Frames of the simulation to save as snapshots
+        self.snapshot_name=''  # Base file name for the snapshots
+        self.steps=500         # Frames to run the simulation for
+        self.show=True         # Whether to show the matplotlib animation as its running
+        self.save=False        # Whether to save a video of the matplotlib animation
+        self.vid_name=""       # File name for the saved video
+
+        ##### General dynamics properties
+        self.noise=0                   # Magnitude of noise to perturb agents every frame
+        self.quality_loss = 0.5        # Cost of communicating between regions
+        self.attract_strength = 0.001  # Factor affecting how much agents are attracted to others with similar opinions
+        self.repel_strength = 0        # Factor affecting how much agents are repelled from others with different opinions
+
+        ##### Opinion properties
+        self.low_firmness = 0.1        # Firmness (resistance to change) for low firmness agents
+        self.high_firmness = 0.9       # Firmness for high firmness agents
+        self.low_charisma = 1.0        # Charisma (power to change others) for low charisma agents
+        self.high_charisma = 1.0       # Charisma for high charisma agents
+
+        ##### Extra features
         self.use_parties = False
         self.num_politicians = 1
         self.num_lobbies = 2
         self.party_interval = 1
         self.party_inertia = 0.01
-        self.quality_loss = 0.5
-        self.bubbles=4
-        self.dimensions=2
-        self.low_firmness = 0.1
-        self.high_firmness = 0.9
-        self.low_charisma = 1.0
-        self.high_charisma = 1.0
         self.lobby_charisma_hack = None
 
         for key, value in kwargs.items():
@@ -89,7 +99,7 @@ def get_charisma(args, is_lobby, is_politician, lobby_charisma_hack):
     return charisma, charisma != args.low_charisma
 
 class Opinion:
-    def __init__(self, dimensions, charisma, high_charisma, firmness, high_firmness, bubble, is_politician, is_lobby, lobby_dimension, lobby_charisma_hack):
+    def __init__(self, dimensions, charisma, high_charisma, firmness, high_firmness, region, is_politician, is_lobby, lobby_dimension, lobby_charisma_hack):
         if is_lobby:
             if lobby_charisma_hack is not None:
                 assert charisma == lobby_charisma_hack
@@ -103,7 +113,7 @@ class Opinion:
         self.high_charisma = high_charisma
         self.firmness = firmness
         self.high_firmness = high_firmness
-        self.bubble = bubble
+        self.region = region
         assert sum([is_politician, is_lobby]) <= 1
         self.is_politician = is_politician
         self.is_lobby = is_lobby
@@ -160,7 +170,7 @@ class OpinionClass:
     def __init__(self, args):
         self.update_func = inverse_force(args)
         self.args = args
-        self.bubble_distances = np.ones((args.bubbles,args.bubbles))-np.eye(args.bubbles)
+        self.region_distances = np.ones((args.regions,args.regions))-np.eye(args.regions)
         assert not args.use_parties or args.num_politicians == 2
 
     def opinion_distance(self,x,y):
@@ -174,10 +184,10 @@ class OpinionClass:
             return np.linalg.norm(x.pos - y.pos) / self.quality(x,y)
 
     def new_opinion(self, index):
-        bubble = index % self.args.bubbles
-        assert self.args.num_politicians + self.args.num_lobbies <= self.args.population // self.args.bubbles
-        is_politician = index < self.args.bubbles * self.args.num_politicians
-        is_lobby = index < self.args.bubbles * (self.args.num_politicians + self.args.num_lobbies) and not is_politician
+        region = index % self.args.regions
+        assert self.args.num_politicians + self.args.num_lobbies <= self.args.population // self.args.regions
+        is_politician = index < self.args.regions * self.args.num_politicians
+        is_lobby = index < self.args.regions * (self.args.num_politicians + self.args.num_lobbies) and not is_politician
 
         lobby_charisma_hack = None
         if is_lobby:
@@ -194,7 +204,7 @@ class OpinionClass:
         else:
             lobby_dimension = -1
 
-        return Opinion(self.args.dimensions, charisma, high_charisma, firmness, high_firmness, bubble, is_politician, is_lobby, lobby_dimension, lobby_charisma_hack)
+        return Opinion(self.args.dimensions, charisma, high_charisma, firmness, high_firmness, region, is_politician, is_lobby, lobby_dimension, lobby_charisma_hack)
 
     def get_midline(self, x, y):
         return get_midline(x.pos, y.pos)
@@ -209,7 +219,7 @@ class OpinionClass:
         x.pos = self.update_func(x.pos, [y.get_lobby_pos(x) for y in ys], self.firmness(x), [self.charisma(x,y) for y in ys])
 
     def quality(self, x, y):
-        return 1 - self.bubble_distances[x.bubble, y.bubble] * self.args.quality_loss
+        return 1 - self.region_distances[x.region, y.region] * self.args.quality_loss
 
 def get_midline(a, b):
     assert any(a != b)
@@ -248,10 +258,10 @@ class AgentClass:
         self.opinions[x].add_noise(self.args.noise)
 
     def get_politicians(self, axis):
-        return [o for o in self.opinions.values() if o.is_politician and o.bubble == axis]
+        return [o for o in self.opinions.values() if o.is_politician and o.region == axis]
 
     def get_voters(self, axis):
-        return [o for o in self.opinions.values() if o.bubble == axis and not o.is_politician]
+        return [o for o in self.opinions.values() if o.region == axis and not o.is_politician]
 
     def draw_parties(self, axis, ax):
         if not self.args.use_parties:
@@ -271,7 +281,7 @@ class AgentClass:
 
     def draw_lobbies(self, G, axis, ax):
         for o in self.opinions.values():
-            if o.is_lobby and o.bubble == axis:
+            if o.is_lobby and o.region == axis:
                 linex, liney = o.get_lobby_line()
                 ax.plot(linex, liney, color=get_lobby_color(o), alpha=0.5, linewidth=1)
 
@@ -280,7 +290,7 @@ class AgentClass:
         for e in G.edges():
             o1 = self.opinions[e[0]]
             o2 = self.opinions[e[1]]
-            if o1.bubble != axis and o2.bubble != axis:
+            if o1.region != axis and o2.region != axis:
                 continue
             elif o1.is_lobby:
                 assert not o2.is_lobby
@@ -290,7 +300,7 @@ class AgentClass:
             else:
                 continue
             edge_pos.append((o1.get_lobby_pos(o2),o2.pos))
-            edge_colors.append(within_region if o1.bubble == o2.bubble else between_region)
+            edge_colors.append(within_region if o1.region == o2.region else between_region)
 
         edge_collection = LineCollection(edge_pos, colors=edge_colors, antialiaseds=(1,), transOffset=ax.transData)
         edge_collection.set_zorder(1)
@@ -307,7 +317,7 @@ class AgentClass:
         assert self.args.dimensions == 2
         assert self.args.num_politicians == 2
 
-        for axis in range(self.args.bubbles):
+        for axis in range(self.args.regions):
             a,b = self.get_politicians(axis)
             voters = self.get_voters(axis)
             a_allies = [x.pos for x in voters if np.linalg.norm(x.pos - a.pos) < np.linalg.norm(x.pos - b.pos)]
@@ -338,13 +348,13 @@ class AgentClass:
 
     def get_node_draw_data(self, G, axis):
         positions = self.positions(G)
-        positions_filtered = {x: p for x,p in positions.items() if self.opinions[x].bubble == axis and not self.opinions[x].is_lobby}
+        positions_filtered = {x: p for x,p in positions.items() if self.opinions[x].region == axis and not self.opinions[x].is_lobby}
         unique_positions = self.get_duplicate_lists(positions_filtered)
         colors = {xs[0] : get_color([self.opinions[x] for x in xs]) for xs in unique_positions}
         sizes = {xs[0] : self.get_size(xs) for xs in unique_positions}
-        nodes = [xs[0] for xs in unique_positions if self.opinions[xs[0]].bubble == axis]
-        edges = [e for e in G.edges() if (self.opinions[e[0]].bubble == axis or self.opinions[e[1]].bubble == axis) and not (self.opinions[e[0]].is_lobby or self.opinions[e[1]].is_lobby)]
-        edge_colors = [within_region if (self.opinions[e[0]].bubble == self.opinions[e[1]].bubble) else between_region for e in edges]
+        nodes = [xs[0] for xs in unique_positions if self.opinions[xs[0]].region == axis]
+        edges = [e for e in G.edges() if (self.opinions[e[0]].region == axis or self.opinions[e[1]].region == axis) and not (self.opinions[e[0]].is_lobby or self.opinions[e[1]].is_lobby)]
+        edge_colors = [within_region if (self.opinions[e[0]].region == self.opinions[e[1]].region) else between_region for e in edges]
         # nodelist, edgelist, pos, colors, edge_colors, sizes
         return nodes, edges, positions, [colors[x] for x in nodes], edge_colors, [sizes[x] for x in nodes]
 
@@ -424,7 +434,7 @@ def animate(args = Arguments()):
     G = nx.empty_graph(args.population)
     Agents = AgentClass(args)
     Updater = UpdateClass(Agents, G, args)
-    gridsize = int(np.ceil(np.sqrt(args.bubbles)))
+    gridsize = int(np.ceil(np.sqrt(args.regions)))
     fig, axes_array = plt.subplots(gridsize, gridsize, squeeze=False)
     axes = axes_array.flatten()
     for ax in axes:
@@ -445,7 +455,7 @@ def run_simulation(args, components=None, histogram_x=None):
         update(n, Updater, [], None, args, False)
         if components is not None:
             ccs = list(nx.connected_components(G))
-            result = [sum(1 for cc in ccs if any(Agents.opinions[node].bubble == i for node in cc)) for i in range(args.bubbles)]
+            result = [sum(1 for cc in ccs if any(Agents.opinions[node].region == i for node in cc)) for i in range(args.regions)]
             components.append(result)
         if histogram_x is not None:
             result = [0 for _ in range(100)]
@@ -467,7 +477,7 @@ def figure_one():
     runs = []
     for r in range(figure_repeats):
         components = []
-        run_simulation(Arguments(steps=figure_steps, show=False, num_politicians=0, num_lobbies=0, quality_loss=0.5, bubbles=1), components=components)
+        run_simulation(Arguments(steps=figure_steps, show=False, num_politicians=0, num_lobbies=0, quality_loss=0.5, regions=1), components=components)
         runs.append(components)
         print("{}/{}".format(1 + r, figure_repeats))
     runs = np.array(runs)
@@ -483,7 +493,7 @@ def figure_two():
         runs = []
         for r in range(figure_repeats):
             components = []
-            run_simulation(Arguments(steps=figure_steps, show=False, num_politicians=0, num_lobbies=0, quality_loss=quality_loss, bubbles=10), components=components)
+            run_simulation(Arguments(steps=figure_steps, show=False, num_politicians=0, num_lobbies=0, quality_loss=quality_loss, regions=10), components=components)
             runs.append(components[-1])
             print("{}/{}".format(1 + r + figure_repeats*i, figure_repeats*figure_inputs))
         runs = np.array(runs)
@@ -504,7 +514,7 @@ def figure_three():
         for r in range(figure_repeats):
             # # TODO TODO fix lobby position
             histogram = []
-            run_simulation(Arguments(steps=figure_steps, show=False, num_politicians=0, num_lobbies=1, quality_loss=0.5, bubbles=1, lobby_charisma_hack=lobby_charisma), histogram_x=histogram)
+            run_simulation(Arguments(steps=figure_steps, show=False, num_politicians=0, num_lobbies=1, quality_loss=0.5, regions=1, lobby_charisma_hack=lobby_charisma), histogram_x=histogram)
             runs.append(histogram[-1])
             print("{}/{}".format(1 + r + figure_repeats*i, figure_repeats*figure_inputs))
         runs = np.array(runs)
@@ -547,13 +557,13 @@ def make_figures():
 
 ## new diagrams:
 def run_diagrams():
-    animate(Arguments(firmness_type=Firmness.Inverse, num_politicians=0, use_parties=False, num_lobbies=2, bubbles=1, quality_loss=0.5,  snapshot={10,200}, snapshot_name='A-lobbies', steps=201))
-    animate(Arguments(firmness_type=Firmness.Inverse, num_politicians=0, use_parties=False, num_lobbies=0, bubbles=4, quality_loss=0.5,  snapshot={10,200}, snapshot_name='A-connect', steps=201))
-    animate(Arguments(firmness_type=Firmness.Inverse, num_politicians=0, use_parties=False, num_lobbies=0, bubbles=4, quality_loss=0.99, snapshot={10,200}, snapshot_name='A-apart',   steps=201))
-    animate(Arguments(firmness_type=Firmness.Inverse, num_politicians=2, use_parties=True,  num_lobbies=0, bubbles=1, quality_loss=0.5,  snapshot={10,200}, snapshot_name='A-parties', steps=201))
+    animate(Arguments(firmness_type=Firmness.Inverse, num_politicians=0, use_parties=False, num_lobbies=2, regions=1, quality_loss=0.5,  snapshot={10,200}, snapshot_name='A-lobbies', steps=201))
+    animate(Arguments(firmness_type=Firmness.Inverse, num_politicians=0, use_parties=False, num_lobbies=0, regions=4, quality_loss=0.5,  snapshot={10,200}, snapshot_name='A-connect', steps=201))
+    animate(Arguments(firmness_type=Firmness.Inverse, num_politicians=0, use_parties=False, num_lobbies=0, regions=4, quality_loss=0.99, snapshot={10,200}, snapshot_name='A-apart',   steps=201))
+    animate(Arguments(firmness_type=Firmness.Inverse, num_politicians=2, use_parties=True,  num_lobbies=0, regions=1, quality_loss=0.5,  snapshot={10,200}, snapshot_name='A-parties', steps=201))
 
 def video_diagrams():
-    animate(Arguments(firmness_type=Firmness.Inverse, num_politicians=0, use_parties=False, num_lobbies=2, bubbles=1, quality_loss=0.5,  steps=201, show=False, save=True, vid_name="A-lobbies-vid"))
-    #animate(Arguments(firmness_type=Firmness.Inverse, num_politicians=0, use_parties=False, num_lobbies=0, bubbles=4, quality_loss=0.5,  steps=201, show=False, save=True, vid_name="A-connect-vid"))
-    #animate(Arguments(firmness_type=Firmness.Inverse, num_politicians=0, use_parties=False, num_lobbies=0, bubbles=4, quality_loss=0.99, steps=201, show=False, save=True, vid_name="A-apart-vid"))
-    #animate(Arguments(firmness_type=Firmness.Inverse, num_politicians=2, use_parties=True,  num_lobbies=0, bubbles=1, quality_loss=0.5,  steps=201, show=False, save=True, vid_name="A-parties-vid"))
+    animate(Arguments(firmness_type=Firmness.Inverse, num_politicians=0, use_parties=False, num_lobbies=2, regions=1, quality_loss=0.5,  steps=201, show=False, save=True, vid_name="A-lobbies-vid"))
+    #animate(Arguments(firmness_type=Firmness.Inverse, num_politicians=0, use_parties=False, num_lobbies=0, regions=4, quality_loss=0.5,  steps=201, show=False, save=True, vid_name="A-connect-vid"))
+    #animate(Arguments(firmness_type=Firmness.Inverse, num_politicians=0, use_parties=False, num_lobbies=0, regions=4, quality_loss=0.99, steps=201, show=False, save=True, vid_name="A-apart-vid"))
+    #animate(Arguments(firmness_type=Firmness.Inverse, num_politicians=2, use_parties=True,  num_lobbies=0, regions=1, quality_loss=0.5,  steps=201, show=False, save=True, vid_name="A-parties-vid"))
