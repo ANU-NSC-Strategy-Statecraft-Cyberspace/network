@@ -38,7 +38,6 @@ class Arguments:
         self.num_sources = 0
         self.attract_strength = 0.001
         self.repel_strength = 0
-        self.repel_extreme_factor = 0
         self.use_parties = False
         self.num_politicians = 1
         self.num_lobbies = 2
@@ -130,19 +129,16 @@ class Opinion:
 def inverse_force(args):
     k=args.attract_strength
     z=args.repel_strength
-    z_factor=args.repel_extreme_factor
     def update_func(x, ys, firmness, charismas):
         assert firmness >= 0 and firmness <= 1.0
         assert len(charismas) == len(ys)
         assert all(c >= 0 and c <= 1.0 for c in charismas)
-        extreme = np.linalg.norm(x)
-        zz = z + extreme * z_factor
         if len(ys) > 0:
             both = list(zip(ys, charismas))
             np.random.shuffle(both)
             for y, c in both:
                 dist = np.linalg.norm(x-y)
-                var = dist*dist*(1+zz) - 2*k*c*firmness
+                var = dist*dist*(1+z) - 2*k*c*firmness
                 if var < 0:
                     x = y
                 else:
