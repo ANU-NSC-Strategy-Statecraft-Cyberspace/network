@@ -10,6 +10,9 @@ high_charisma_color = np.array([0, 0, 1.0])
 high_firmness_color = np.array([1.0, 0, 0])
 high_charisma_and_firmness_color = np.array([1.0, 0, 1.0])
 
+within_region_edge_color = np.array([0.0, 0.0, 0.0, 1.0])
+between_region_edge_color = np.array([1.0, 0.0, 0.0, 0.3])
+
 def get_lobby_color(o):
     return lobby_color
 
@@ -22,9 +25,9 @@ def get_color(xs):
     for x in xs:
         if x.is_politician:
             has_politician = True
-        if x.high_charisma:
+        if x.has_high_charisma:
             has_high_charisma = True
-        if x.high_firmness:
+        if x.has_high_firmness:
             has_high_firmness = True
 
     if has_politician:
@@ -36,24 +39,6 @@ def get_color(xs):
     if has_high_firmness:
         return high_firmness_color
     return default_color
-
-def get_firmness(args, is_lobby, is_politician):
-    if is_lobby or is_politician:
-        return 1.0, False
-
-    firmness = choice([args.low_firmness, args.high_firmness])
-    return firmness, firmness != args.low_firmness
-
-def get_charisma(args, is_lobby, is_politician, lobby_charisma_hack):
-    if is_lobby or is_politician:
-        if lobby_charisma_hack is not None:
-            assert is_lobby
-            return lobby_charisma_hack, False
-        else:
-            return 1.0, False
-    assert lobby_charisma_hack is None
-    charisma = choice([args.low_charisma, args.high_charisma])
-    return charisma, charisma != args.low_charisma
 
 class Opinion:
     def __init__(self, dimensions, charisma, high_charisma, firmness, high_firmness, region, is_politician, is_lobby, lobby_dimension, lobby_charisma_hack):
@@ -122,15 +107,126 @@ def inverse_force(args):
         else:
             return x
     return update_func
+	
+class Agent:
+	def __init__(self, context, region):
+		self.args = context.args
+		self.region = region
+		self.opinion = Opinion(self.args.dimensions, charisma, high_charisma, firmness, high_firmness, is_politician, is_lobby, lobby_dimension, lobby_charisma_hack)
+		
+		self.firmness = choice([self.args.low_firmness, self.args.high_firmness])
+		self.has_high_firmness = self.firmness != self.args.low_firmness
+		
+		self.charisma = choice([self.args.low_charisma, self.args.high_charisma])
+		self.has_high_charisma = self.charisma != self.args.low_charisma
 
-class OpinionClass:
+class Party:
+	def __init__(self, context, region):
+		self.args = context.args
+		self.region = region
+		
+		self.firmness = 1.0
+		self.charisma = 1.0
+
+class Lobby:
+	def __init__(self, context, region):
+		self.args = context.args
+		self.region = region
+		
+		self.firmness = 1.0
+
+		if self.args.lobby_charisma_hack is not None:
+            self.lobby_dimension = 0
+			self.charisma = self.args.lobby_charisma_hack
+        else:
+            self.lobby_dimension = choice(range(self.args.dimensions))
+			self.charisma = 1.0
+
+class Context:
     def __init__(self, args):
+		self.args = args
+        self.agents = {Agent(self, x % args.regions) for x in range(args.population)}
+		self.parties = {Party(self, r) for r in range(args.regions) for _ in range(2)} if args.use_parties else {}
+		self.lobbies = {Lobby(self, r) for r in range(args.regions) for _ in range(args.num_lobbies)}
+        self.G = nx.Graph()
+		self.G.add_nodes_from(self.agents)
+		self.G.add_nodes_from(self.parties)
+		self.G.add_nodes_from(self.lobbies)
+        
+        self.current_party_interval = 1
+		
         self.update_func = inverse_force(args)
-        self.args = args
         self.region_distances = np.ones((args.regions,args.regions))-np.eye(args.regions)
-        assert not args.use_parties or args.num_politicians == 2
 
-    def opinion_distance(self,x,y):
+    """ Under the dunbar number, agents make connections in strict order of close opinions
+        Over the dunbar number, agents break connections with the least shared opinion
+        At the dunbar number, agents randomly probe for other neighbours with closer opinions
+    """
+
+    def above_dunbar(self, x):
+        self.G.remove_edge(x,max(self.G[x], key=lambda y: self.opinion_distance(x,y)))
+
+    def below_dunbar(self, x):
+        candidates = [y for y in self.G if y != x and y not in self.G[x]]
+        if candidates:
+            winner = self.G.add_edge(x,min(candidates, key=lambda y: self.opinion_distance(x,y)))
+
+    def at_dunbar(self, x):
+        if self.G[x]:
+            y = choice(list(self.G.nodes))
+            z = choice(list(self.G[x].keys()))
+            if y != x and self.opinion_distance(x,y) < self.opinion_distance(x,z):
+                self.G.add_edge(x,y)
+                self.G.remove_edge(x,z)
+
+    def update(self, axes, draw):
+        self.update_parties()
+        for x in self.agents:
+			if len(self.G[x]) > args.dunbar:
+				self.above_dunbar(x)
+			elif len(self.G[x]) < args.dunbar:
+				self.below_dunbar(x)
+			else:
+				self.at_dunbar(x)
+
+                self.update_opinion(x,self.G[x])
+        return self.draw_step(axes, draw)
+
+    def draw_step(self, axes, draw):
+        if draw:
+            for i, ax in enumerate(axes):
+                ax.clear()
+                ax.set_xlim([-1.1,1.1])
+                ax.set_ylim([-1.1,1.1])
+                nodelist, edgelist, pos, colors, edge_colors, sizes = self.get_node_draw_data(self.G, i)
+                self.draw_lobbies(self.G, i, ax)
+                nx.draw_networkx(self.G, pos=pos, nodelist=nodelist, edgelist=edgelist, ax=ax, node_color=colors, edge_color=edge_colors, node_size=sizes, with_labels=False, alpha=None)
+                self.draw_parties(i, ax)
+                ax.set_xticks([])
+                ax.set_yticks([])
+        return axes
+		
+	def connected_components(self):
+	    ccs = list(nx.connected_components(self.G))
+        result = [sum(1 for cc in ccs if any(self.opinions[node].region == i for node in cc)) for i in range(self.args.regions)]
+		return result
+		
+	def histogram_x(self):
+		result = [0 for _ in range(100)]
+		for o in self.opinions.values():
+			if not o.is_lobby:
+				fl = np.floor((o.pos[0]+1)*50.0)
+				if fl >= 100:
+					fl = 99
+				result[int(fl)] += 1
+		return result
+		
+	    def positions(self, G):
+        return {x : o.pos for x,o in self.opinions.items()}
+
+    def opinion_distance(self, x, y):
+		x = self.opinions[x]
+		y = self.opinions[y]
         if x.is_lobby and y.is_lobby:
             assert False
         elif x.is_lobby:
@@ -140,73 +236,11 @@ class OpinionClass:
         else:
             return np.linalg.norm(x.pos - y.pos) / self.quality(x,y)
 
-    def new_opinion(self, index):
-        region = index % self.args.regions
-        assert self.args.num_politicians + self.args.num_lobbies <= self.args.population // self.args.regions
-        is_politician = index < self.args.regions * self.args.num_politicians
-        is_lobby = index < self.args.regions * (self.args.num_politicians + self.args.num_lobbies) and not is_politician
-
-        lobby_charisma_hack = None
-        if is_lobby:
-            lobby_charisma_hack = self.args.lobby_charisma_hack
-
-        firmness, high_firmness = get_firmness(self.args, is_lobby, is_politician)
-        charisma, high_charisma = get_charisma(self.args, is_lobby, is_politician, lobby_charisma_hack)
-
-        if is_lobby:
-            if self.args.lobby_charisma_hack is not None:
-                lobby_dimension = 0
-            else:
-                lobby_dimension = choice(range(self.args.dimensions))
-        else:
-            lobby_dimension = -1
-
-        return Opinion(self.args.dimensions, charisma, high_charisma, firmness, high_firmness, region, is_politician, is_lobby, lobby_dimension, lobby_charisma_hack)
-
-    def get_midline(self, x, y):
-        return get_midline(x.pos, y.pos)
-
-    def firmness(self, x):
-        return x.firmness
-
-    def charisma(self, x, y):
-        return y.charisma * self.quality(x, y)
-
-    def update_opinion(self,x,ys):
-        x.pos = self.update_func(x.pos, [y.get_lobby_pos(x) for y in ys], self.firmness(x), [self.charisma(x,y) for y in ys])
-
-    def quality(self, x, y):
-        return 1 - self.region_distances[x.region, y.region] * self.args.quality_loss
-
-def get_midline(a, b):
-    assert any(a != b)
-    midpoint = (a + b)/2
-    vx, vy = b - midpoint
-    vx, vy = vy, -vx
-    if vx == 0:
-        return (midpoint[0], midpoint[0]), (-2, 2)
-    else:
-        slope = vy / vx
-        f = (lambda x: midpoint[1] + (x - midpoint[0]) * slope)
-        return (-2, 2), (f(-2), f(2))
-
-class AgentClass:
-    def __init__(self, args):
-        self.args = args
-        self.OpinionClass = OpinionClass(args)
-        self.opinions = {x : self.OpinionClass.new_opinion(x) for x in range(args.population)}
-        assert args.noise >= 0 and args.noise <= 1
-        self.current_party_interval = 1
-
-    def positions(self, G):
-        return {x : o.pos for x,o in self.opinions.items()}
-
-    def opinion_distance(self, x, y):
-        return self.OpinionClass.opinion_distance(self.opinions[x], self.opinions[y])
-
-    def update_opinion(self, x, y):
-        self.OpinionClass.update_opinion(self.opinions[x], [self.opinions[y] for y in ys])
-        self.opinions[x].add_noise(self.args.noise)
+    def update_opinion(self, x, ys):
+		x = self.opinions[x]
+		ys = [self.opinions[y] for y in ys]
+		x.pos = self.update_func(x.pos, [y.get_lobby_pos(x) for y in ys], self.firmness(x), [self.charisma(x,y) for y in ys])
+        x.add_noise(self.args.noise)
 
     def get_politicians(self, axis):
         return [o for o in self.opinions.values() if o.is_politician and o.region == axis]
@@ -217,10 +251,8 @@ class AgentClass:
     def draw_parties(self, axis, ax):
         if not self.args.use_parties:
             return
-        assert self.args.dimensions == 2
-        assert self.args.num_politicians == 2
         a,b = self.get_politicians(axis)
-        linex, liney = self.OpinionClass.get_midline(a, b)
+        linex, liney = self.get_midline(a, b)
         voters = self.get_voters(axis)
         ax.plot(linex, liney, color='g')
         avotes = sum(1 for x in voters if np.linalg.norm(x.pos - a.pos) < np.linalg.norm(x.pos - b.pos))
@@ -251,7 +283,7 @@ class AgentClass:
             else:
                 continue
             edge_pos.append((o1.get_lobby_pos(o2),o2.pos))
-            edge_colors.append(within_region if o1.region == o2.region else between_region)
+            edge_colors.append(within_region_edge_color if o1.region == o2.region else between_region_edge_color)
 
         edge_collection = LineCollection(edge_pos, colors=edge_colors, antialiaseds=(1,), transOffset=ax.transData)
         edge_collection.set_zorder(1)
@@ -265,8 +297,6 @@ class AgentClass:
             return
         else:
             self.current_party_interval = 1
-        assert self.args.dimensions == 2
-        assert self.args.num_politicians == 2
 
         for axis in range(self.args.regions):
             a,b = self.get_politicians(axis)
@@ -309,64 +339,25 @@ class AgentClass:
         # nodelist, edgelist, pos, colors, edge_colors, sizes
         return nodes, edges, positions, [colors[x] for x in nodes], edge_colors, [sizes[x] for x in nodes]
 
-within_region = (0.0, 0.0, 0.0, 1.0)
-between_region = (1.0, 0.0, 0.0, 0.3)
+    def get_midline(self, x, y):
+        a = x.pos
+		b = y.pos
+		assert any(a != b)
+		midpoint = (a + b)/2
+		vx, vy = b - midpoint
+		vx, vy = vy, -vx
+		if vx == 0:
+			return (midpoint[0], midpoint[0]), (-2, 2)
+		else:
+			slope = vy / vx
+			f = (lambda x: midpoint[1] + (x - midpoint[0]) * slope)
+			return (-2, 2), (f(-2), f(2))
 
-class Context:
-    def __init__(self, args):
-        self.agents = AgentClass(args)
-        self.G = nx.empty_graph(args.population)
-        self.args = args
+    def firmness(self, x):
+        return x.firmness
 
-    """ Under the dunbar number, agents make connections in strict order of close opinions
-        Over the dunbar number, agents break connections with the least shared opinion
-        At the dunbar number, agents randomly probe for other neighbours with closer opinions
-    """
+    def charisma(self, x, y):
+        return y.charisma * self.quality(x, y)
 
-    def above_dunbar(self, x):
-        self.G.remove_edge(x,max(self.G[x], key=lambda y: self.Agents.opinion_distance(x,y)))
-
-    def below_dunbar(self, x):
-        candidates = [y for y in self.G if y != x and y not in self.G[x]]
-        if candidates:
-            winner = self.G.add_edge(x,min(candidates, key=lambda y: self.Agents.opinion_distance(x,y)))
-
-    def at_dunbar(self, x):
-        if self.G[x]:
-            y = choice(list(self.G.nodes))
-            z = choice(list(self.G[x].keys()))
-            if y != x and self.Agents.opinion_distance(x,y) < self.Agents.opinion_distance(x,z):
-                self.G.add_edge(x,y)
-                self.G.remove_edge(x,z)
-
-    def update(self, axes, draw):
-        self.Agents.update_parties()
-        for x in self.G:
-            if self.Agents.opinions[x].is_lobby:
-                pass
-            elif self.Agents.opinions[x].is_politician and self.args.use_parties:
-                pass
-            else:
-                if len(self.G[x]) > args.dunbar:
-                    self.above_dunbar(x)
-                elif len(self.G[x]) < args.dunbar:
-                    self.below_dunbar(x)
-                else:
-                    self.at_dunbar(x)
-
-                self.Agents.update_opinion(x,self.G[x])
-        return self.draw_step(axes, draw)
-
-    def draw_step(self, axes, draw):
-        if draw:
-            for i, ax in enumerate(axes):
-                ax.clear()
-                ax.set_xlim([-1.1,1.1])
-                ax.set_ylim([-1.1,1.1])
-                nodelist, edgelist, pos, colors, edge_colors, sizes = self.Agents.get_node_draw_data(self.G, i)
-                self.Agents.draw_lobbies(self.G, i, ax)
-                nx.draw_networkx(self.G, pos=pos, nodelist=nodelist, edgelist=edgelist, ax=ax, node_color=colors, edge_color=edge_colors, node_size=sizes, with_labels=False, alpha=None)
-                self.Agents.draw_parties(i, ax)
-                ax.set_xticks([])
-                ax.set_yticks([])
-        return axes
+    def quality(self, x, y):
+        return 1 - self.region_distances[x.region, y.region] * self.args.quality_loss

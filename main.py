@@ -1,4 +1,3 @@
-import networkx as nx
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,7 +7,7 @@ class Arguments:
     def __init__(self, **kwargs):
         ##### Population properties
         self.dunbar = 5     # Dunbar number: how many connections normal agents want
-        self.population=100 # Number of agents in the game
+        self.population=100 # Number of ordinary agents in the game
         self.regions=4      # Number of geographical regions agents are separated into
         self.dimensions=2   # Number of opinion dimensions (only 2 can be displayed, but more or less can be simulated if show=False and save=False)
 
@@ -35,16 +34,18 @@ class Arguments:
         ##### Party properties
         # Parties are special agents that compete for votes. They adjust their opinion to try to capture 50% of the vote
         self.use_parties = False
-        self.num_politicians = 1
-        self.num_lobbies = 2
         self.party_interval = 1
         self.party_inertia = 0.01
 
         ##### Lobby properties
+        self.num_lobbies = 2
         self.lobby_charisma_hack = None
 
         for key, value in kwargs.items():
             setattr(self, key, value)
+			
+		assert self.noise >= 0 and self.noise <= 1
+		assert self.dimensions == 2 or (not self.show and not self.save)
 
 
 def update(num, context, axes, fig, args, draw):
@@ -77,18 +78,9 @@ def run_simulation(args, components=None, histogram_x=None):
     for n in range(args.steps):
         update(n, context, [], None, args, False)
         if components is not None:
-            ccs = list(nx.connected_components(context.G))
-            result = [sum(1 for cc in ccs if any(context.agents.opinions[node].region == i for node in cc)) for i in range(args.regions)]
-            components.append(result)
+            components.append(context.connected_components())
         if histogram_x is not None:
-            result = [0 for _ in range(100)]
-            for o in context.agents.opinions.values():
-                if not o.is_lobby:
-                    fl = np.floor((o.pos[0]+1)*50.0)
-                    if fl >= 100:
-                        fl = 99
-                    result[int(fl)] += 1
-            histogram_x.append(result)
+            histogram_x.append(context.histogram_x())
 
 
 figure_steps = 300
