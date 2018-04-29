@@ -39,13 +39,15 @@ class Arguments:
 
         ##### Lobby properties
         self.num_lobbies = 2
-        self.lobby_charisma_hack = None
+        self.fixed_lobby_dimension = None
+        self.fixed_lobby_charisma = None
+        self.fixed_lobby_opinion = None
 
         for key, value in kwargs.items():
             setattr(self, key, value)
-			
-		assert self.noise >= 0 and self.noise <= 1
-		assert self.dimensions == 2 or (not self.show and not self.save)
+            
+        assert self.noise >= 0 and self.noise <= 1
+        assert self.dimensions == 2 or (not self.show and not self.save)
 
 
 def update(num, context, axes, fig, args, draw):
@@ -92,7 +94,7 @@ def figure_one():
     runs = []
     for r in range(figure_repeats):
         components = []
-        run_simulation(Arguments(steps=figure_steps, show=False, num_politicians=0, num_lobbies=0, quality_loss=0.5, regions=1), components=components)
+        run_simulation(Arguments(steps=figure_steps, show=False, use_parties=False, num_lobbies=0, quality_loss=0.5, regions=1), components=components)
         runs.append(components)
         print("{}/{}".format(1 + r, figure_repeats))
     runs = np.array(runs)
@@ -108,7 +110,7 @@ def figure_two():
         runs = []
         for r in range(figure_repeats):
             components = []
-            run_simulation(Arguments(steps=figure_steps, show=False, num_politicians=0, num_lobbies=0, quality_loss=quality_loss, regions=10), components=components)
+            run_simulation(Arguments(steps=figure_steps, show=False, use_parties=False, num_lobbies=0, quality_loss=quality_loss, regions=10), components=components)
             runs.append(components[-1])
             print("{}/{}".format(1 + r + figure_repeats*i, figure_repeats*figure_inputs))
         runs = np.array(runs)
@@ -129,7 +131,7 @@ def figure_three():
         for r in range(figure_repeats):
             # # TODO TODO fix lobby position
             histogram = []
-            run_simulation(Arguments(steps=figure_steps, show=False, num_politicians=0, num_lobbies=1, quality_loss=0.5, regions=1, lobby_charisma_hack=lobby_charisma), histogram_x=histogram)
+            run_simulation(Arguments(steps=figure_steps, show=False, use_parties=False, num_lobbies=1, quality_loss=0.5, regions=1, fixed_lobby_dimension=0, fixed_lobby_opinion=0, fixed_lobby_charisma=lobby_charisma), histogram_x=histogram)
             runs.append(histogram[-1])
             print("{}/{}".format(1 + r + figure_repeats*i, figure_repeats*figure_inputs))
         runs = np.array(runs)
@@ -172,13 +174,13 @@ def make_figures():
 
 ## new diagrams:
 def run_diagrams():
-    animate(Arguments(num_politicians=0, use_parties=False, num_lobbies=2, regions=1, quality_loss=0.5,  snapshot={10,200}, snapshot_name='A-lobbies', steps=201))
-    animate(Arguments(num_politicians=0, use_parties=False, num_lobbies=0, regions=4, quality_loss=0.5,  snapshot={10,200}, snapshot_name='A-connect', steps=201))
-    animate(Arguments(num_politicians=0, use_parties=False, num_lobbies=0, regions=4, quality_loss=0.99, snapshot={10,200}, snapshot_name='A-apart',   steps=201))
-    animate(Arguments(num_politicians=2, use_parties=True,  num_lobbies=0, regions=1, quality_loss=0.5,  snapshot={10,200}, snapshot_name='A-parties', steps=201))
+    animate(Arguments(use_parties=False, num_lobbies=2, regions=1, quality_loss=0.5,  snapshot={10,200}, snapshot_name='A-lobbies', steps=201))
+    animate(Arguments(use_parties=False, num_lobbies=0, regions=4, quality_loss=0.5,  snapshot={10,200}, snapshot_name='A-connect', steps=201))
+    animate(Arguments(use_parties=False, num_lobbies=0, regions=4, quality_loss=0.99, snapshot={10,200}, snapshot_name='A-apart',   steps=201))
+    animate(Arguments(use_parties=True,  num_lobbies=0, regions=1, quality_loss=0.5,  snapshot={10,200}, snapshot_name='A-parties', steps=201))
 
 def video_diagrams():
-    animate(Arguments(num_politicians=0, use_parties=False, num_lobbies=2, regions=1, quality_loss=0.5,  steps=201, show=False, save=True, vid_name="A-lobbies-vid"))
-    #animate(Arguments(num_politicians=0, use_parties=False, num_lobbies=0, regions=4, quality_loss=0.5,  steps=201, show=False, save=True, vid_name="A-connect-vid"))
-    #animate(Arguments(num_politicians=0, use_parties=False, num_lobbies=0, regions=4, quality_loss=0.99, steps=201, show=False, save=True, vid_name="A-apart-vid"))
-    #animate(Arguments(num_politicians=2, use_parties=True,  num_lobbies=0, regions=1, quality_loss=0.5,  steps=201, show=False, save=True, vid_name="A-parties-vid"))
+    animate(Arguments(use_parties=False, num_lobbies=2, regions=1, quality_loss=0.5,  steps=201, show=False, save=True, vid_name="A-lobbies-vid"))
+    #animate(Arguments(use_parties=False, num_lobbies=0, regions=4, quality_loss=0.5,  steps=201, show=False, save=True, vid_name="A-connect-vid"))
+    #animate(Arguments(use_parties=False, num_lobbies=0, regions=4, quality_loss=0.99, steps=201, show=False, save=True, vid_name="A-apart-vid"))
+    #animate(Arguments(use_parties=True,  num_lobbies=0, regions=1, quality_loss=0.5,  steps=201, show=False, save=True, vid_name="A-parties-vid"))
