@@ -51,17 +51,19 @@ class Arguments:
         assert self.dimensions == 2 or (not self.show and not self.save)
 
 
-def update(num, context, axes, fig, args, draw):
-    axes = context.update(axes, draw)
-    if draw:
+def update(num, context, axes, fig, args, should_draw):
+    """ Run one frame of the simulation in context, writing changes to axes and fig """
+    axes = context.update(axes, should_draw)
+    if should_draw:
         fig.suptitle('Step: {}'.format(num))
     if num in args.snapshot:
-        assert draw
+        assert should_draw
         assert len(args.snapshot_name) > 0
         fig.savefig('{}-figure-{}.png'.format(args.snapshot_name, num))
     return axes
 
 def animate(args = Arguments()):
+    """ Initialise and run a single run of the simulation """
     context = Context(args)
     gridsize = int(np.ceil(np.sqrt(args.regions)))
     fig, axes_array = plt.subplots(gridsize, gridsize, squeeze=False)
@@ -75,8 +77,33 @@ def animate(args = Arguments()):
         graph_ani.save('{}.mp4'.format(args.vid_name), fps=10)
     plt.close()
 
+def run_diagrams():
+    """ Some interesting runs to show off the model
+        Run 1: Simple model with two random lobbies
+        Run 2: Model with 4 regions and low cost of communication
+        Run 3: Model with 4 regions and high cost of communication
+        Run 4: Demonstration of parties
+    """
+    animate(Arguments(use_parties=False, num_lobbies=2, regions=1, quality_loss=0.5,  steps=201))
+    animate(Arguments(use_parties=False, num_lobbies=0, regions=4, quality_loss=0.5,  steps=201))
+    animate(Arguments(use_parties=False, num_lobbies=0, regions=4, quality_loss=0.99, steps=201))
+    animate(Arguments(use_parties=True,  num_lobbies=0, regions=1, quality_loss=0.5,  steps=201))
+
+def video_diagrams():
+    """ Save the animations as videos """
+    animate(Arguments(use_parties=False, num_lobbies=2, regions=1, quality_loss=0.5,  steps=201, show=False, save=True, vid_name="A-lobbies-vid", snapshot={10,200}, snapshot_name='A-lobbies'))
+    animate(Arguments(use_parties=False, num_lobbies=0, regions=4, quality_loss=0.5,  steps=201, show=False, save=True, vid_name="A-connect-vid", snapshot={10,200}, snapshot_name='A-connect'))
+    animate(Arguments(use_parties=False, num_lobbies=0, regions=4, quality_loss=0.99, steps=201, show=False, save=True, vid_name="A-apart-vid",   snapshot={10,200}, snapshot_name='A-apart'))
+    animate(Arguments(use_parties=True,  num_lobbies=0, regions=1, quality_loss=0.5,  steps=201, show=False, save=True, vid_name="A-parties-vid", snapshot={10,200}, snapshot_name='A-parties'))
+
+if __name__ == "__main__":
+    run_diagrams()
+
 
 def run_simulation(args, components=None, histogram_x=None):
+    """ Initialise and run a single run of the simulation without any animation
+        Optionally, record some data in "components" and "histogram_x" arrays
+    """
     context = Context(args)
     for n in range(args.steps):
         update(n, context, [], None, args, False)
@@ -86,12 +113,20 @@ def run_simulation(args, components=None, histogram_x=None):
             histogram_x.append(context.histogram_x())
 
 
-figure_steps = 300
-figure_repeats = 20
-figure_inputs = 20
+# Settings for the multi-simulation figures
+figure_steps = 300  # How long to make each run
+figure_repeats = 20 # How many runs to average over
+figure_inputs = 20  # How many distinct parameter values to use on the X-axis for figures that vary some parameter
+
+# These figures aggregate data from multiple runs. As such, they take a long time to run, so the process of making them is split in two:
+# The first step is to generate the data and save it as a numpy *.npy file
+# The second step is to generate the figure from the data (so you can experiment with different formatting without rerunning the simulation)
 
 def figure_one():
-    #graph of connected components across time (do people form filter bubbles?)
+     """ Graph of connected components across time (do people form filter bubbles?)
+         No filter bubble = single connected component
+         More bubbles = more components
+     """
     runs = []
     for r in range(figure_repeats):
         components = []
@@ -104,7 +139,10 @@ def figure_one():
     np.save('figure_1.npy', runs)
 
 def figure_two():
-    #graph of connected components per axis across communication penalty (use more regions)
+    """ Graph of "connected components per region" across communication penalty
+        One component per region = everybody is geographically segregated but connected within their region
+        Many components per region = even within a region people have filter bubbles (but maybe connected across regions)
+    """
     result = []
     inputs = np.linspace(0.0, 0.9999, num=figure_inputs)
     for i, quality_loss in enumerate(inputs):
@@ -124,13 +162,14 @@ def figure_two():
 
 
 def figure_three():
-    #heat map of opinions on one axis against lobby charisma
+    """ Heatmap of the distribution of X-axis opinions against the charisma of a lobby on the X-axis
+        As the lobby gets more charismatic, the opinions become more concentrated
+    """
     result = []
     inputs = np.linspace(0.0, 1.0, num=figure_inputs)
     for i, lobby_charisma in enumerate(inputs):
         runs = []
         for r in range(figure_repeats):
-            # # TODO TODO fix lobby position
             histogram = []
             run_simulation(Arguments(steps=figure_steps, show=False, use_parties=False, num_lobbies=1, quality_loss=0.5, regions=1, fixed_lobby_dimension=0, fixed_lobby_opinion=0, fixed_lobby_charisma=lobby_charisma), histogram_x=histogram)
             runs.append(histogram[-1])
@@ -171,17 +210,3 @@ def make_figures():
     plt.ylabel("Charisma of lobby")
     #plt.colorbar()
     plt.savefig('A-figure_3.png')
-
-
-## new diagrams:
-def run_diagrams():
-    animate(Arguments(use_parties=False, num_lobbies=2, regions=1, quality_loss=0.5,  snapshot={10,200}, snapshot_name='A-lobbies', steps=201))
-    animate(Arguments(use_parties=False, num_lobbies=0, regions=4, quality_loss=0.5,  snapshot={10,200}, snapshot_name='A-connect', steps=201))
-    animate(Arguments(use_parties=False, num_lobbies=0, regions=4, quality_loss=0.99, snapshot={10,200}, snapshot_name='A-apart',   steps=201))
-    animate(Arguments(use_parties=True,  num_lobbies=0, regions=1, quality_loss=0.5,  snapshot={10,200}, snapshot_name='A-parties', steps=201))
-
-def video_diagrams():
-    animate(Arguments(use_parties=False, num_lobbies=2, regions=1, quality_loss=0.5,  steps=201, show=False, save=True, vid_name="A-lobbies-vid"))
-    #animate(Arguments(use_parties=False, num_lobbies=0, regions=4, quality_loss=0.5,  steps=201, show=False, save=True, vid_name="A-connect-vid"))
-    #animate(Arguments(use_parties=False, num_lobbies=0, regions=4, quality_loss=0.99, steps=201, show=False, save=True, vid_name="A-apart-vid"))
-    #animate(Arguments(use_parties=True,  num_lobbies=0, regions=1, quality_loss=0.5,  steps=201, show=False, save=True, vid_name="A-parties-vid"))

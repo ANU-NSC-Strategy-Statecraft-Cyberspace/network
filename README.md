@@ -8,3 +8,8 @@ National Security College <http://nsc.anu.edu.au/>, Australian National Universi
 Main contact: Professor Roger Bradbury <roger.bradbury@anu.edu.au>
 
 # Usage
+For some cool animations, run:
+
+`python3 main.py`
+
+To generate various figures, run the appropriate functions defined in main.py
