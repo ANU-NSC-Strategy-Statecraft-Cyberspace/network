@@ -123,10 +123,10 @@ figure_inputs = 20  # How many distinct parameter values to use on the X-axis fo
 # The second step is to generate the figure from the data (so you can experiment with different formatting without rerunning the simulation)
 
 def figure_one():
-     """ Graph of connected components across time (do people form filter bubbles?)
-         No filter bubble = single connected component
-         More bubbles = more components
-     """
+    """ Graph of connected components across time (do people form filter bubbles?)
+        No filter bubble = single connected component
+        More bubbles = more components
+    """
     runs = []
     for r in range(figure_repeats):
         components = []
