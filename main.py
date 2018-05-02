@@ -34,18 +34,19 @@ class Arguments:
         ##### Party properties
         # Parties are special agents that compete for votes. They adjust their opinion to try to capture 50% of the vote
         self.use_parties = False
-        self.party_interval = 1
-        self.party_inertia = 0.01
+        self.party_interval = 1     # Let the parties move once per this many frames
+        self.party_inertia = 0.01   # Limit on the distance parties can move per interval
 
         ##### Lobby properties
+        # Lobbies are agents with only one opinion dimension that they care about, who are smeared across the other dimensions
         self.num_lobbies = 2
-        self.fixed_lobby_dimension = None
-        self.fixed_lobby_charisma = None
-        self.fixed_lobby_opinion = None
+        self.fixed_lobby_dimension = None # If 'None' each lobby picks a random dimension, otherwise they all pick this one (e.g. 0, 1)
+        self.fixed_lobby_charisma = None  # If 'None' each lobby has charisma 1.0, otherwise this value
+        self.fixed_lobby_opinion = None   # If 'None' each lobby picks a random opinion value (in [-1,1]), otherwise this value
 
         for key, value in kwargs.items():
             setattr(self, key, value)
-            
+
         assert self.noise >= 0 and self.noise <= 1
         assert self.dimensions == 2 or (not self.show and not self.save)
 
