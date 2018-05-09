@@ -96,9 +96,6 @@ def video_diagrams():
     animate(Arguments(use_parties=False, num_lobbies=0, regions=4, quality_loss=0.99, steps=201, show=False, save=True, vid_name="A-apart-vid",   snapshot={10,200}, snapshot_name='A-apart'))
     animate(Arguments(use_parties=True,  num_lobbies=0, regions=1, quality_loss=0.5,  steps=201, show=False, save=True, vid_name="A-parties-vid", snapshot={10,200}, snapshot_name='A-parties'))
 
-if __name__ == "__main__":
-    run_diagrams()
-
 
 def run_simulation(args, components=None, histogram_x=None):
     """ Initialise and run a single run of the simulation without any animation
@@ -210,3 +207,6 @@ def make_figures():
     plt.ylabel("Charisma of lobby")
     #plt.colorbar()
     plt.savefig('A-figure_3.png')
+
+if __name__ == "__main__":
+    run_diagrams()

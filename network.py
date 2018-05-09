@@ -158,23 +158,24 @@ class Context:
                 self.update_parties()
 
         for x in self.agents:
+            neighbors = list(self.G[x])
             """ Under the dunbar number, agents make connections in strict order of close opinions
                 Over the dunbar number, agents break connections with the least shared opinion
                 At the dunbar number, agents randomly probe for other neighbours with closer opinions
             """
-            if len(self.G[x]) > self.args.dunbar:
-                self.G.remove_edge(x, x.choose_connection_to_break(self.G[x]))
-            elif len(self.G[x]) < self.args.dunbar:
+            if len(neighbors) > self.args.dunbar:
+                self.G.remove_edge(x, x.choose_connection_to_break(neighbors))
+            elif len(neighbors) < self.args.dunbar:
                 new_neighbor = x.choose_connection_to_make(nx.non_neighbors(self.G, x))
                 if new_neighbor:
                     self.G.add_edge(x, new_neighbor)
             else:
-                old_neighbor, new_neighbor = x.choose_connection_to_change(self.G[x], nx.non_neighbors(self.G, x))
+                old_neighbor, new_neighbor = x.choose_connection_to_change(neighbors, nx.non_neighbors(self.G, x))
                 if new_neighbor is not None:
                     self.G.add_edge(x,new_neighbor)
                     self.G.remove_edge(x,old_neighbor)
 
-            x.update_opinion(self.G[x])
+            x.update_opinion(neighbors)
 
         if should_draw:
             for region, ax in enumerate(axes):
